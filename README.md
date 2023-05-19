@@ -6,3 +6,8 @@ NAS4
 
 /volume1/1_InternalCompany/Image_matching_challenge/image-matching-challenge-2023/train/haiper
 
+Pretrained model dir
+
+NAS4
+
+/volume1/1_InternalCompany/Image_matching_challenge/weights/tfeat-liberty.params
