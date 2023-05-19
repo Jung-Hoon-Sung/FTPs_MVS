@@ -1,13 +1,11 @@
 # IMC_innopam
 
-Dataset dir
+## Dataset Directory
 
-NAS4
+- **NAS4**
+  - Path: `/volume1/1_InternalCompany/Image_matching_challenge/image-matching-challenge-2023/train/haiper`
 
-/volume1/1_InternalCompany/Image_matching_challenge/image-matching-challenge-2023/train/haiper
+## Pretrained Model Directory
 
-Pretrained model dir
-
-NAS4
-
-/volume1/1_InternalCompany/Image_matching_challenge/weights/tfeat-liberty.params
+- **NAS4**
+  - Path: `/volume1/1_InternalCompany/Image_matching_challenge/weights/tfeat-liberty.params`
