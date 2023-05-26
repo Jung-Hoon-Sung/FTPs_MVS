@@ -31,19 +31,6 @@ pip install -r requirements.txt
 ```
 pip install --upgrade kornia
 ```
-```
-pip install fastprogress
-```
-```
-pip install timm
-```
-```
-pip install pycolmap
-```
-```
-pip install pydegensac
-```
-
 **Check before you start:**
 
 Before starting, set the path of ```config.py``` and ```mAA_eval.py``` to your local environment path.
