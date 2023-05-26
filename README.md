@@ -29,6 +29,9 @@ cd IMC_innopam
 pip install -r requirements.txt
 ```
 ```
+pip install --upgrade kornia
+```
+```
 pip install fastprogress
 ```
 ```
@@ -36,6 +39,9 @@ pip install timm
 ```
 ```
 pip install pycolmap
+```
+```
+pip install pydegensac
 ```
 
 **Check before you start:**
