@@ -28,7 +28,15 @@ cd IMC_innopam
 ```
 pip install -r requirements.txt
 ```
-
+```
+pip install fastprogress
+```
+```
+pip install timm
+```
+```
+pip install pycolmap
+```
 
 **Check before you start:**
 
