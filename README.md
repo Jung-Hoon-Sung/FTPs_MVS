@@ -28,3 +28,26 @@ cd IMC_innopam
 ```
 pip install -r requirements.txt
 ```
+
+
+**Check before you start:**
+
+Before starting, set the path of ```config.py``` and ```mAA_eval.py``` to your local environment path.
+
+You can use multi-resolution and model ensemble using ```config.py```. 
+
+You can also experiment by adjusting each parameter.
+
+**Inference:**
+```
+cd submit
+
+python3 submission_innopam.py
+```
+
+**mAA eval:**
+```
+cd module
+
+python3 mAA_eval.py
+```
