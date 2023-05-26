@@ -62,7 +62,6 @@ featureout = config.featureout
 feature_dir = config.feature_dir
 
 num_feats = config.num_feats
-max_length = config.max_length
 matching_alg = config.matching_alg
 min_matches = config.min_matches
 
@@ -74,9 +73,6 @@ output_submission = config.output_submission
 MAX_IMAGE_ID = config.MAX_IMAGE_ID
 IS_PYTHON3 = config.IS_PYTHON3
 
-keypoints_h5 = config.keypoints_h5
-matches_h5 = config.matches_h5
-
 OriNet = config.OriNet
 KeyNet = config.KeyNet
 AffNet = config.AffNet
@@ -84,22 +80,7 @@ HardNet = config.HardNet
 HardNet8 = config.HardNet8
 
 DISK = config.DISK
-
-DISK_lafs = config.DISK_lafs
-DISK_keypoints = config.DISK_keypoints
-DISK_descriptors = config.DISK_descriptors
-DISK_matches = config.DISK_matches
-
-KeyNet_lafs = config.KeyNet_lafs
-KeyNet_keypoints = config.KeyNet_keypoints
-KeyNet_descriptors = config.KeyNet_descriptors
-KeyNet_matches = config.KeyNet_matches
-
-
 LoFTR = config.LoFTR
-LoFTR_matches = config.LoFTR_matches
-LoFTR_keypoints = config.LoFTR_keypoints
-
 colmap_db = config.colmap_db
 ###################################################
 
@@ -533,7 +514,7 @@ class KeyNetAffNetHardNet(KF.LocalFeature):
 
     def __init__(
         self,
-        num_features: int = 40000,
+        num_features: int = 5000,
         upright: bool = False,
         device = torch.device('cpu'),
         scale_laf: float = 1.0,
@@ -551,6 +532,7 @@ class KeyNetAffNetHardNet(KF.LocalFeature):
         affnet_weights = torch.load(AffNet)['state_dict']
         detector.aff.load_state_dict(affnet_weights)
         
+        """descriptors"""
         hardnet = KF.HardNet(False).eval()
         hn_weights = torch.load(HardNet)['state_dict']
         hardnet.load_state_dict(hn_weights)
@@ -568,7 +550,8 @@ class KeyNetAffNetHardNet(KF.LocalFeature):
         # sosnet = KF.SOSNet(True).eval()
         # descriptor = KF.LAFDescriptor(sosnet, patch_size=32, grayscale_descriptor=True).to(device)
         # super().__init__(detector, descriptor, scale_laf)
-
+        """##############"""
+        
 def calculate_new_size(size, max_length):
     height, width = size
     aspect_ratio = float(width) / float(height)
@@ -935,31 +918,6 @@ def import_into_colmap(img_dir,
     db.commit()
     return
 
-# Get data from csv.
-
-data_dict = {}
-with open(f'{src}/{table_submission}', 'r') as f:
-    for i, l in enumerate(f):
-        # Skip header.
-        if l and i > 0:
-            image, dataset, scene, _, _ = l.strip().split(',')
-            if dataset not in data_dict:
-                data_dict[dataset] = {}
-            if scene not in data_dict[dataset]:
-                data_dict[dataset][scene] = []
-            data_dict[dataset][scene].append(image)
-            
-for dataset in data_dict:
-    for scene in data_dict[dataset]:
-        print(f'{dataset} / {scene} -> {len(data_dict[dataset][scene])} images')
-        
-out_results = {}
-timings = {"shortlisting":[],
-           "feature_detection": [],
-           "feature_matching":[],
-           "RANSAC": [],
-           "Reconstruction": []}
-
 # Function to create a submission file.
 def create_submission(out_results, data_dict, output_submission):    
     with open(output_submission, 'w') as f:
@@ -983,7 +941,31 @@ def create_submission(out_results, data_dict, output_submission):
                         R = np.eye(3).reshape(-1)
                         T = np.zeros((3))
                     f.write(f'{image},{dataset},{scene},{arr_to_str(R)},{arr_to_str(T)}\n')
-                
+                    
+# Get data from csv.
+data_dict = {}
+with open(f'{src}/{table_submission}', 'r') as f:
+    for i, l in enumerate(f):
+        # Skip header.
+        if l and i > 0:
+            image, dataset, scene, _, _ = l.strip().split(',')
+            if dataset not in data_dict:
+                data_dict[dataset] = {}
+            if scene not in data_dict[dataset]:
+                data_dict[dataset][scene] = []
+            data_dict[dataset][scene].append(image)
+            
+for dataset in data_dict:
+    for scene in data_dict[dataset]:
+        print(f'{dataset} / {scene} -> {len(data_dict[dataset][scene])} images')
+        
+out_results = {}
+timings = {"shortlisting":[],
+           "feature_detection": [],
+           "feature_matching":[],
+           "RANSAC": [],
+           "Reconstruction": []}
+
 gc.collect()
 datasets = []
 for dataset in data_dict:
@@ -1140,8 +1122,8 @@ for dataset in datasets:
             create_submission(out_results, data_dict, output_submission=output_submission)
             gc.collect()
             
-#         # except:
-#         #     pass
+        # except:
+        #     pass
             
         except Exception as e:
             print(f"An error occurred during the second loop: {e}")
