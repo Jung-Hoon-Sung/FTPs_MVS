@@ -37,7 +37,7 @@ device=torch.device("cuda")
 features_resolutions = {
     # features: 'LoFTR', 'DISK', 'KeyNetAffNetHardNet'
     # resolutions: [600, 840, 1024]
-    'KeyNetAffNetHardNet': [1696],
+    'KeyNetAffNetHardNet': [1696, 1536],
     'DISK': [1024]
 }
 ENSEMBLE = any(len(resolutions) > 1 for resolutions in features_resolutions.values()) or len(features_resolutions) > 1
@@ -61,9 +61,9 @@ max_num_models = 50 # 처리할 수 있는 최대 모델 수 /defualt 50
 ba_local_num_images = 6
 ba_global_images_freq = 500
 ba_global_points_freq  = 250000
-init_num_trials = 200 # 초기 모델을 찾는 데 사용되는 RANSAC 반복 횟수 /defualt 200
-min_num_matches = 15 # 두 이미지 간에 최소한으로 매칭되어야 하는 특징점의 개수
-min_model_size = 3 # RANSAC 시 필요한 최소한의 데이터 포인트 수
+init_num_trials = 200 # The number of trials to initialize the reconstruction. /defualt 200
+min_num_matches = 15 # The minimum number of matches for inlier matches to be considered. /defualt 15
+min_model_size = 10 # The minimum number of registered images of a sub-model
 
 if MODE == "train":
     # image dir path
@@ -73,9 +73,9 @@ if MODE == "train":
     featureout = 'featureout'
     lables_csv = 'ground_truth_heritage_cyprus'
     dataset_scene = 'heritage_cyprus'
-    # lables_csv = 'train_labels_haiper_chairs'
+    # lables_csv = 'ground_truth_haiper_chairs'
     # dataset_scene = 'haiper_chairs'
-    # lables_csv = 'train_labels_all_class'
+    # lables_csv = 'ground_truth_all_class'
     # dataset_scene = 'all_class'
     # |- urban
     # |-- kyiv-puppet-theater ... 26
