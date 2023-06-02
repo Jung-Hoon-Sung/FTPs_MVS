@@ -6,7 +6,6 @@ from fastprogress import progress_bar
 import gc
 import numpy as np
 import h5py
-from IPython.display import clear_output
 from collections import defaultdict
 from copy import deepcopy
 
@@ -20,7 +19,7 @@ from PIL import Image
 import timm
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
-import config
+import sys
 import traceback
 
 import sqlite3
@@ -32,72 +31,114 @@ import pycolmap
 print('Kornia version', K.__version__)
 print('Pycolmap version', pycolmap.__version__)
 
+MODE = "train"  # train or test
 
-###################################################
-# Config
+device=torch.device("cuda")
+features_resolutions = {
+    # features: 'LoFTR', 'DISK', 'KeyNetAffNetHardNet'
+    # resolutions: [600, 840, 1024]
+    'KeyNetAffNetHardNet': [1696],
+    'DISK': [1536]
+}
+ENSEMBLE = any(len(resolutions) > 1 for resolutions in features_resolutions.values()) or len(features_resolutions) > 1
 
-device=torch.device(config.DEVICE)
-local_features = config.local_features
-resolutions = config.resolutions
+# colmap
+MAX_IMAGE_ID = 2**31 - 1
+IS_PYTHON3 = sys.version_info[0] >= 3
 
-print(f"*"*100)
-print(f"***** local_features: {local_features} *****")
-print(f"***** resolutions: {resolutions} *****")
-print(f"*"*100)
+# detect_features - general
+num_feats = 40000
+matching_alg = 'adalam' # smnn, adalam
+min_matches = 10
 
-if len(local_features) > 1 or len(resolutions) > 1:
-    ENSEMBLE = True
-else:
-    ENSEMBLE = False
-    
-sim_th = config.sim_th
-min_pairs = config.min_pairs
-exhaustive_if_less = config.exhaustive_if_less
+# matche_features
+ransac_iters = 128
+search_expansion = 16
 
-src = config.src
-src2 = config.src2
-src3 = config.src3
-featureout = config.featureout
+# incremental_mapping
+num_threads = -1
+max_num_models = 50 # 처리할 수 있는 최대 모델 수 /defualt 50
+ba_local_num_images = 6
+ba_global_images_freq = 500
+ba_global_points_freq  = 250000
+init_num_trials = 200 # 초기 모델을 찾는 데 사용되는 RANSAC 반복 횟수 /defualt 200
+min_num_matches = 15 # 두 이미지 간에 최소한으로 매칭되어야 하는 특징점의 개수
+min_model_size = 3 # RANSAC 시 필요한 최소한의 데이터 포인트 수
 
-feature_dir = config.feature_dir
+if MODE == "train":
+    # image dir path
+    src = '/home/user/Repositories/IMC_innopam/data/image-matching-challenge-2023'
+    src2 = 'train' # 'train', 'test'
+    src3 = 'images'
+    featureout = 'featureout'
+    lables_csv = 'train_labels_heritage_cyprus'
+    dataset_scene = 'heritage_cyprus'
+    # lables_csv = 'train_labels_haiper_chairs'
+    # dataset_scene = 'haiper_chairs'
+    # lables_csv = 'train_labels_all_class'
+    # dataset_scene = 'all_class'
+    # |- urban
+    # |-- kyiv-puppet-theater ... 26
+    # |- heritage
+    # |-- dioscuri ... 174
+    # |-- cyprus
+    # |-- wall
+    # |- haiper
+    # |-- bike
+    # |-- chairs
+    # |-- fountain
 
-num_feats = config.num_feats
-matching_alg = config.matching_alg
-min_matches = config.min_matches
+    # get_image_pairs_shortlist
+    sim_th = 0.6 # should be strict
+    min_pairs = 20
+    exhaustive_if_less = 20
+    model_name = 'tf_efficientnet_l2_ns_475'
+    checkpoint_path='/home/user/Repositories/IMC_innopam/data/weights/tf-efficientnet/pytorch/tf-efficientnet-l2-ns-475/1/tf_efficientnet_l2_ns_475-bebbd00a.pth'
 
-database_path = config.database_path
+    # KeyNetAffNetHardNet
+    orinet_path = '/home/user/Repositories/IMC_innopam/data/weights/kornia-local-feature-weights/OriNet.pth'
+    keynet_path = '/home/user/Repositories/IMC_innopam/data/weights/kornia-local-feature-weights/keynet_pytorch.pth'
+    affnet_path = '/home/user/Repositories/IMC_innopam/data/weights/kornia-local-feature-weights/AffNet.pth'
+    hardnet_path = '/home/user/Repositories/IMC_innopam/data/weights/kornia-local-feature-weights/HardNet.pth'
 
-table_submission = config.table_submission
-output_submission = config.output_submission
+    # DISK
+    disk_path = '/home/user/Repositories/IMC_innopam/data/weights/disk/pytorch/depth-supervision/1/loftr_outdoor.ckpt'
 
-MAX_IMAGE_ID = config.MAX_IMAGE_ID
-IS_PYTHON3 = config.IS_PYTHON3
+    # LoFTR
+    loftr_path = '/home/user/Repositories/IMC_innopam/data/weights/loftr/pytorch/outdoor/1/loftr_outdoor.ckpt'
+    ###################################################
+else:   # if MODE == "test"
+    ###################################################    
+    src = '/kaggle/input/image-matching-challenge-2023'
+    src2 = 'test' # 'train', 'test'
+    src3 = 'images'
+    featureout = 'featureout'
+    lables_csv = 'sample_submission'
 
-OriNet = config.OriNet
-KeyNet = config.KeyNet
-AffNet = config.AffNet
-HardNet = config.HardNet
-HardNet8 = config.HardNet8
-Disk = config.Disk
-LoFTR = config.LoFTR
+    # get_image_pairs_shortlist
+    sim_th = 0.6 # should be strict
+    min_pairs = 20
+    exhaustive_if_less = 20
+    model_name = 'tf_efficientnet_l2_ns_475'
+    checkpoint_path='/kaggle/input/tf-efficientnet/pytorch/tf-efficientnet-l2-ns-475/1/tf_efficientnet_l2_ns_475-bebbd00a.pth'
 
-num_features = config.num_features
-scale_laf = config.scale_laf
-ransac_iters = config.ransac_iters
-search_expansion = config.search_expansion
+    # KeyNetAffNetHardNet
+    orinet_path = '/kaggle/input/kornia-local-feature-weights/OriNet.pth'
+    keynet_path = '/kaggle/input/kornia-local-feature-weights/keynet_pytorch.pth'
+    affnet_path = '/kaggle/input/kornia-local-feature-weights/AffNet.pth'
+    hardnet_path = '/kaggle/input/kornia-local-feature-weights/HardNetLib.pth'
 
-num_threads = config.num_threads
-max_num_models = config.max_num_models
-ba_local_num_images = config.ba_local_num_images
-ba_global_images_freq = config.ba_global_images_freq
-ba_global_points_freq  = config.ba_global_points_freq
-init_num_trials = config.init_num_trials
-min_num_matches = config.min_num_matches
-min_model_size = config.min_model_size 
-ba_global_max_num_iterations = config.ba_global_max_num_iterations
-###################################################
+    # DISK
+    disk_path = '/kaggle/input/disk/pytorch/depth-supervision/1/loftr_outdoor.ckpt'
 
-# Can be LoFTR, KeyNetAffNetHardNet, or DISK
+    # LoFTR
+    loftr_path = '/kaggle/input/loftr/pytorch/outdoor/1/loftr_outdoor.ckpt'
+    ###################################################
+
+print(f'features_resolutions: {features_resolutions}')
+print(f'model_name: {model_name}')
+print(f'checkpoint_path: {checkpoint_path}')
+print(f'num_feats: {num_feats}, matching_alg: {matching_alg}, min_matches: {min_matches}')
 
 def arr_to_str(a):
     return ';'.join([str(x) for x in a.reshape(-1)])
@@ -149,15 +190,8 @@ def get_image_pairs_shortlist(fnames,
     if num_imgs <= exhaustive_if_less:
         return get_img_pairs_exhaustive(fnames)
 
-    # model = timm.create_model('tf_efficientnet_b8', pretrained=True)
-    # model = timm.create_model('efficientformerv2_s2.snap_dist_in1k', pretrained=True)
-    # model = timm.create_model('tf_efficientnet_l2.ns_jft_in1k', pretrained=True)
-    # model = timm.create_model('resnet152', pretrained=True)
-    # model = timm.create_model('swin_base_patch4_window7_224', pretrained=True)
-    
-    model = timm.create_model('tf_efficientnet_l2.ns_jft_in1k_475', pretrained=False)
-    # model = timm.create_model('tf_efficientnet_b8', pretrained=False)
-    model.load_state_dict(torch.load(config.checkpoint_path))
+    model = timm.create_model(model_name,
+                              checkpoint_path=checkpoint_path)
     model.eval()
     descs = get_global_desc(fnames, model, device=device)
     dm = torch.cdist(descs, descs, p=2).detach().cpu().numpy()
@@ -175,7 +209,7 @@ def get_image_pairs_shortlist(fnames,
         for idx in to_match:
             if st_idx == idx:
                 continue
-            if dm[st_idx, idx] < 10000:
+            if dm[st_idx, idx] < 1000:
                 matching_list.append(tuple(sorted((st_idx, idx.item()))))
                 total+=1
     matching_list = sorted(list(set(matching_list)))
@@ -400,7 +434,7 @@ class COLMAPDatabase(sqlite3.Connection):
             "INSERT INTO two_view_geometries VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (pair_id,) + matches.shape + (array_to_blob(matches), config,
              array_to_blob(F), array_to_blob(E), array_to_blob(H)))
-        
+
 # Code to interface DISK with Colmap.
 # Forked from https://github.com/cvlab-epfl/disk/blob/37f1f7e971cea3055bb5ccfc4cf28bfd643fa339/colmap/h5_to_db.py
 
@@ -422,7 +456,6 @@ import os, argparse, h5py, warnings
 import numpy as np
 from tqdm import tqdm
 from PIL import Image, ExifTags
-
 
 def get_focal(image_path, err_on_default=False):
     image         = Image.open(image_path)
@@ -521,7 +554,7 @@ def add_matches(db, h5_path, fname_to_id, matches_name = 'ensemble_matches.h5'):
                 added.add(pair_id)
 
                 pbar.update(1)
-                
+
 # Making kornia local features loading w/o internet
 class KeyNetAffNetHardNet(KF.LocalFeature):
     """Convenience module, which implements KeyNet detector + AffNet + HardNet descriptor.
@@ -531,25 +564,25 @@ class KeyNetAffNetHardNet(KF.LocalFeature):
 
     def __init__(
         self,
-        num_features: int = num_features,
+        num_features: int = 5000,
         upright: bool = False,
         device = torch.device('cpu'),
-        scale_laf: float = scale_laf,
+        scale_laf: float = 1.0,
     ):
         ori_module = KF.PassLAF() if upright else KF.LAFOrienter(angle_detector=KF.OriNet(False)).eval()
         if not upright:
-            weights = torch.load(OriNet)['state_dict']
+            weights = torch.load(orinet_path)['state_dict']
             ori_module.angle_detector.load_state_dict(weights)
         detector = KF.KeyNetDetector(False, num_features=num_features, ori_module=ori_module, aff_module=KF.LAFAffNetShapeEstimator(False).eval()).to(device)
         
-        kn_weights = torch.load(KeyNet)['state_dict']
+        kn_weights = torch.load(keynet_path)['state_dict']
         detector.model.load_state_dict(kn_weights)
-        affnet_weights = torch.load(AffNet)['state_dict']
+        affnet_weights = torch.load(affnet_path)['state_dict']
         detector.aff.load_state_dict(affnet_weights)
         
         """descriptors"""
         hardnet = KF.HardNet(False).eval()
-        hn_weights = torch.load(HardNet)['state_dict']
+        hn_weights = torch.load(hardnet_path)['state_dict']
         hardnet.load_state_dict(hn_weights)
         descriptor = KF.LAFDescriptor(hardnet, patch_size=32, grayscale_descriptor=True).to(device)
         super().__init__(detector, descriptor, scale_laf)
@@ -566,7 +599,7 @@ class KeyNetAffNetHardNet(KF.LocalFeature):
         # descriptor = KF.LAFDescriptor(sosnet, patch_size=32, grayscale_descriptor=True).to(device)
         # super().__init__(detector, descriptor, scale_laf)
         """##############"""
-        
+
 def calculate_new_size(size, max_length):
     height, width = size
     aspect_ratio = float(width) / float(height)
@@ -591,14 +624,12 @@ def detect_features(img_fnames,
     if local_feature == 'DISK':
         # Load DISK from Kaggle models so it can run when the notebook is offline.
         disk = KF.DISK().to(device)
-        pretrained_dict = torch.load(Disk, map_location=device)
+        pretrained_dict = torch.load(disk_path, map_location=device)
         disk.load_state_dict(pretrained_dict['extractor'])
         # disk = KF.DISK.from_pretrained('depth').to(device)
         disk.eval()
-        # feature_name = 'DISK'
     elif local_feature == 'KeyNetAffNetHardNet':
         feature = KeyNetAffNetHardNet(num_feats, upright, device).to(device).eval()
-        # feature_name = 'KeyNetAffNetHardNet'
     else:
         raise NotImplementedError
     
@@ -617,14 +648,14 @@ def detect_features(img_fnames,
                 H, W = timg.shape[2:]
                 resize_to = calculate_new_size((H, W), resolution)
                 timg_resized = K.geometry.resize(timg, resize_to, antialias=True)
-                print(f'Resized {timg.shape} to {timg_resized.shape} (max_length={resolution})')
+                print(f'Resized {timg.shape} to {timg_resized.shape} {resolution}')
                 h, w = timg_resized.shape[2:]
                 
                 if local_feature == 'DISK':
                     features = disk(timg_resized, num_feats, pad_if_not_divisible=True)[0]
                     kps1, descs = features.keypoints, features.descriptors
                     
-                    lafs = KF.laf_from_center_scale_ori(kps1[None], torch.ones(1, len(kps1), 1, 1, device=device))
+                    lafs = KF.laf_from_center_scale_ori(kps1[None], 96 * torch.ones(1, len(kps1), 1, 1, device=device))
                 if local_feature == 'KeyNetAffNetHardNet':
                     lafs, resps, descs = feature(K.color.rgb_to_grayscale(timg_resized))
                                 
@@ -658,107 +689,57 @@ def match_features(img_fnames,
                    local_feature = "KeyNetAffNetHardNet",
                    resolution=1200
                    ):
-    
-    if local_feature == 'DISK':
-        assert matching_alg in ['smnn', 'adalam']
-        matches_name = f'{resolution}_{local_feature}_matches.h5'
-        with h5py.File(f'{feature_dir}/{resolution}_{local_feature}_lafs.h5', mode='r') as f_laf, \
-            h5py.File(f'{feature_dir}/{resolution}_{local_feature}_descriptors.h5', mode='r') as f_desc, \
-            h5py.File(f'{feature_dir}/{matches_name}', mode='w') as f_match:
+    assert matching_alg in ['smnn', 'adalam']
+    matches_name = f'{resolution}_{local_feature}_matches.h5'
+    with h5py.File(f'{feature_dir}/{resolution}_{local_feature}_lafs.h5', mode='r') as f_laf, \
+        h5py.File(f'{feature_dir}/{resolution}_{local_feature}_descriptors.h5', mode='r') as f_desc, \
+        h5py.File(f'{feature_dir}/{resolution}_{local_feature}_matches.h5', mode='w') as f_match:
 
-            for pair_idx in progress_bar(index_pairs):
-                idx1, idx2 = pair_idx
-                fname1, fname2 = img_fnames[idx1], img_fnames[idx2]
-                key1, key2 = fname1.split('/')[-1], fname2.split('/')[-1]
-                lafs1 = torch.from_numpy(f_laf[key1][...]).to(device)
-                lafs2 = torch.from_numpy(f_laf[key2][...]).to(device)
-                desc1 = torch.from_numpy(f_desc[key1][...]).to(device)
-                desc2 = torch.from_numpy(f_desc[key2][...]).to(device)
-                if matching_alg == 'adalam':
-                    img1, img2 = cv2.imread(fname1), cv2.imread(fname2)
-                    hw1, hw2 = img1.shape[:2], img2.shape[:2]
-                    adalam_config = KF.adalam.get_adalam_default_config()
-                    #adalam_config['orientation_difference_threshold'] = None
-                    #adalam_config['scale_rate_threshold'] = None
-                    adalam_config['force_seed_mnn']= False
-                    adalam_config['search_expansion'] = search_expansion
-                    adalam_config['ransac_iters'] = ransac_iters
-                    adalam_config['device'] = device
-                    dists, idxs = KF.match_adalam(desc1, desc2,
-                                                lafs1, lafs2, # Adalam takes into account also geometric information
-                                                hw1=hw1, hw2=hw2,
-                                                config=adalam_config) # Adalam also benefits from knowing image size
-                else:
-                    dists, idxs = KF.match_smnn(desc1, desc2, 0.98)
-                if len(idxs)  == 0:
-                    continue
-                # Force mutual nearest neighbors
-                if force_mutual:
-                    first_indices = get_unique_idxs(idxs[:,1])
-                    idxs = idxs[first_indices]
-                    dists = dists[first_indices]
-                n_matches = len(idxs)
-                if False:
-                    print (f'{key1}-{key2}: {n_matches} matches')
-                group  = f_match.require_group(key1)
-                if n_matches >= min_matches:
-                    group.create_dataset(key2, data=idxs.detach().cpu().numpy().reshape(-1, 2))
-                    
-    elif local_feature == 'KeyNetAffNetHardNet':
-        assert matching_alg in ['smnn', 'adalam']
-        matches_name = f'{resolution}_{local_feature}_matches.h5'
-        with h5py.File(f'{feature_dir}/{resolution}_{local_feature}_lafs.h5', mode='r') as f_laf, \
-            h5py.File(f'{feature_dir}/{resolution}_{local_feature}_descriptors.h5', mode='r') as f_desc, \
-            h5py.File(f'{feature_dir}/{matches_name}', mode='w') as f_match:
+        for pair_idx in progress_bar(index_pairs):
+            idx1, idx2 = pair_idx
+            fname1, fname2 = img_fnames[idx1], img_fnames[idx2]
+            key1, key2 = fname1.split('/')[-1], fname2.split('/')[-1]
+            lafs1 = torch.from_numpy(f_laf[key1][...]).to(device)
+            lafs2 = torch.from_numpy(f_laf[key2][...]).to(device)
+            desc1 = torch.from_numpy(f_desc[key1][...]).to(device)
+            desc2 = torch.from_numpy(f_desc[key2][...]).to(device)
+            if matching_alg == 'adalam':
+                img1, img2 = cv2.imread(fname1), cv2.imread(fname2)
+                hw1, hw2 = img1.shape[:2], img2.shape[:2]
+                adalam_config = KF.adalam.get_adalam_default_config()
+                #adalam_config['orientation_difference_threshold'] = None
+                #adalam_config['scale_rate_threshold'] = None
 
-            for pair_idx in progress_bar(index_pairs):
-                idx1, idx2 = pair_idx
-                fname1, fname2 = img_fnames[idx1], img_fnames[idx2]
-                key1, key2 = fname1.split('/')[-1], fname2.split('/')[-1]
-                lafs1 = torch.from_numpy(f_laf[key1][...]).to(device)
-                lafs2 = torch.from_numpy(f_laf[key2][...]).to(device)
-                desc1 = torch.from_numpy(f_desc[key1][...]).to(device)
-                desc2 = torch.from_numpy(f_desc[key2][...]).to(device)
-                if matching_alg == 'adalam':
-                    img1, img2 = cv2.imread(fname1), cv2.imread(fname2)
-                    hw1, hw2 = img1.shape[:2], img2.shape[:2]
-                    adalam_config = KF.adalam.get_adalam_default_config()
-                    #adalam_config['orientation_difference_threshold'] = None
-                    #adalam_config['scale_rate_threshold'] = None
-                    
-                    #이 파라미터가 True로 설정되면, 각 특징점에 대해 가장 가까운 이웃을 강제로 매칭시킴
-                    adalam_config['force_seed_mnn']= False
-                    
-                    #매칭 검색을 확장하는 정도를 결정하는 파라미터입니다. 이 값이 클수록 매칭을 찾기 위해 더 많은 특징점을 고려하게 됨
-                    adalam_config['search_expansion'] = search_expansion
-                    
-                    #RANSAC (Random Sample Consensus) 알고리즘을 이용하여 견고한 매칭을 찾을 때의 반복 횟수를 결정하는 파라미터 
-                    # 이 값이 클수록 더 많은 매칭 후보를 고려하게 되며, 계산 시간이 증가
-                    adalam_config['ransac_iters'] = ransac_iters
-                    
-                    adalam_config['device'] = device
-                    dists, idxs = KF.match_adalam(desc1, desc2,
-                                                lafs1, lafs2, # Adalam takes into account also geometric information
-                                                hw1=hw1, hw2=hw2,
-                                                config=adalam_config) # Adalam also benefits from knowing image size
+                #이 파라미터가 True로 설정되면, 각 특징점에 대해 가장 가까운 이웃을 강제로 매칭시킴
+                adalam_config['force_seed_mnn']= False
 
-                else:   
-                    dists, idxs = KF.match_smnn(desc1, desc2, 0.98)
-                if len(idxs)  == 0:
-                    continue
-                # Force mutual nearest neighbors
-                if force_mutual:
-                    first_indices = get_unique_idxs(idxs[:,1])
-                    idxs = idxs[first_indices]
-                    dists = dists[first_indices]
-                n_matches = len(idxs)
-                if False:
-                    print (f'{key1}-{key2}: {n_matches} matches')
-                group  = f_match.require_group(key1)
-                if n_matches >= min_matches:
-                    group.create_dataset(key2, data=idxs.detach().cpu().numpy().reshape(-1, 2))
-    else:
-        print("select model!!")
+                #매칭 검색을 확장하는 정도를 결정하는 파라미터입니다. 이 값이 클수록 매칭을 찾기 위해 더 많은 특징점을 고려하게 됨
+                adalam_config['search_expansion'] = search_expansion
+
+                #RANSAC (Random Sample Consensus) 알고리즘을 이용하여 견고한 매칭을 찾을 때의 반복 횟수를 결정하는 파라미터 
+                # 이 값이 클수록 더 많은 매칭 후보를 고려하게 되며, 계산 시간이 증가
+                adalam_config['ransac_iters'] = ransac_iters
+
+                adalam_config['device'] = device
+                dists, idxs = KF.match_adalam(desc1, desc2,
+                                            lafs1, lafs2, # Adalam takes into account also geometric information
+                                            hw1=hw1, hw2=hw2,
+                                            config=adalam_config) # Adalam also benefits from knowing image size
+            else:   
+                dists, idxs = KF.match_smnn(desc1, desc2, 0.98)
+            if len(idxs)  == 0:
+                continue
+            # Force mutual nearest neighbors
+            if force_mutual:
+                first_indices = get_unique_idxs(idxs[:,1])
+                idxs = idxs[first_indices]
+                dists = dists[first_indices]
+            n_matches = len(idxs)
+            if False:
+                print (f'{key1}-{key2}: {n_matches} matches')
+            group  = f_match.require_group(key1)
+            if n_matches >= min_matches:
+                group.create_dataset(key2, data=idxs.detach().cpu().numpy().reshape(-1, 2))
                 
     return matches_name
 
@@ -771,13 +752,14 @@ def match_loftr(img_fnames,
                 ):
     gc.collect()
     matcher = KF.LoFTR(pretrained=None)
-    matcher.load_state_dict(torch.load(LoFTR)['state_dict'])
+    matcher.load_state_dict(torch.load(loftr_path)['state_dict'])
     matcher = matcher.to(device).eval()
+    # matcher = KF.LoFTR(pretrained='outdoor').eval().to(device)  # online
+    local_feature = 'LoFTR'
     # First we do pairwise matching, and then extract "keypoints" from loftr matches.
-    local_feature = 'loftr'
     matches_name = f'{resolution}_{local_feature}_matches.h5'
     keypoints_name = f'{resolution}_{local_feature}_keypoints.h5'
-    with h5py.File(f'{feature_dir}/{matches_name}', mode='w') as f_match:
+    with h5py.File(f'{feature_dir}/{resolution}_{local_feature}_matches.h5', mode='w') as f_match:
         for pair_idx in progress_bar(index_pairs):
             idx1, idx2 = pair_idx
             fname1, fname2 = img_fnames[idx1], img_fnames[idx2]
@@ -822,7 +804,7 @@ def match_loftr(img_fnames,
     kpts = defaultdict(list)
     match_indexes = defaultdict(dict)
     total_kpts=defaultdict(int)
-    with h5py.File(f'{feature_dir}/{matches_name}', mode='r') as f_match:
+    with h5py.File(f'{feature_dir}/{resolution}_{local_feature}_matches.h5', mode='r') as f_match:
         for k1 in f_match.keys():
             group  = f_match[k1]
             for k2 in group.keys():
@@ -862,55 +844,49 @@ def match_loftr(img_fnames,
             unique_idxs_current2 = get_unique_idxs(m2_semiclean[:, 1], dim=0)
             m2_semiclean2 = m2_semiclean[unique_idxs_current2]
             out_match[k1][k2] = m2_semiclean2.numpy()
-            
-    matches_name = f'{resolution}_{local_feature}_matches.h5'
-    keypoints_name = f'{resolution}_{local_feature}_keypoints.h5'
-    with h5py.File(f'{feature_dir}/{keypoints_name}', mode='w') as f_kp:
+    with h5py.File(f'{feature_dir}/{resolution}_{local_feature}_keypoints.h5', mode='w') as f_kp:
         for k, kpts1 in unique_kpts.items():
             f_kp[k] = kpts1
     
-    with h5py.File(f'{feature_dir}/{matches_name}', mode='w') as f_match:
+    with h5py.File(f'{feature_dir}/{resolution}_{local_feature}_matches.h5', mode='w') as f_match:
         for k1, gr in out_match.items():
             group  = f_match.require_group(k1)
             for k2, match in gr.items():
                 group[k2] = match
                     
-    return matches_name, keypoints_name
+    return keypoints_name, matches_name
 
-from pydegensac import findHomography
-# pip install pydegensac
 
-def ensemble_matches(keypoints, matches, ensemble_keypoints='ensemble_keypoints.h5', ensemble_matches='ensemble_matches.h5', 
-                     ensemble_output_dir=feature_dir):
-    
-    resolutions = np.array([1536, 1696])
-    
+def ensemble_keypoint_matches(keypoints, matches, ensemble_keypoints, ensemble_matches, ensemble_output_dir):
     bias_table = {}
-    
+
     merged_keypoints = {}
     keypoints.sort()
     for keypoint in keypoints:
         splitext = keypoint.split('_')
         resolution = splitext[0]
         local_feature = splitext[1]
-        print(f"resolution: {resolution}")
-        print(f"local_feature: {local_feature}")
-        
+
         with h5py.File(f'{feature_dir}/{keypoint}', 'r') as data:
             for key, value in data.items():
-                print(f"key: {key}")
                 if key not in merged_keypoints:
                     merged_keypoints[key] = np.array(value)  # directly save as numpy array
                 else:
-                    # merged_keypoints[key] = np.vstack((merged_keypoints[key], np.array(value)))  # stack the arrays vertically
                     merged_keypoints[key] = np.concatenate([merged_keypoints[key], np.array(value)])  # stack the arrays vertically
+                
+                # resolution
                 bias_table.setdefault(resolution, {})
+                # resolution - local_feature
                 bias_table[resolution].setdefault(local_feature, {})
+                
+                # resolution - local_feature - index
                 bias_table[resolution][local_feature].setdefault("index", 0)
-                idx = np.where(resolutions == int(resolution))[0][0]
+                idx = keypoints.index(keypoint)
                 bias_table[resolution][local_feature]["index"] = idx
+                
+                # resolution - local_feature - key
                 bias_table[resolution][local_feature].setdefault(key, 0)
-                bias_table[resolution][local_feature][key] = np.array(value).shape[0]                
+                bias_table[resolution][local_feature][key] = np.array(value).shape[0]
     # print(merged_keypoints)  # print merged_keypoints for checking
     
     merged_matches = {}
@@ -919,9 +895,9 @@ def ensemble_matches(keypoints, matches, ensemble_keypoints='ensemble_keypoints.
         splitext = match.split('_')
         resolution = splitext[0]
         local_feature = splitext[1]
-        with h5py.File(f'{feature_dir}/{match}', 'r') as data:
-            for key, value in data.items():                
-                merged_matches.setdefault(key, {})
+        with h5py.File(f'{feature_dir}/{match}', 'r') as data:  
+            for key, value in data.items():
+                merged_matches.setdefault(key, {})                
                 for key2, value2 in value.items():                    
                     np_val2 = np.array(value2)
                     merged_matches[key].setdefault(key2, [])
@@ -933,19 +909,18 @@ def ensemble_matches(keypoints, matches, ensemble_keypoints='ensemble_keypoints.
                     else:
                         bias1, bias2 = 0, 0
                         for i in range(idx):
-                            resol = str(resolutions[i])
-                            bias1 += bias_table[resol][local_feature][key]
-                            bias2 += bias_table[resol][local_feature][key2]
+                            resol = keypoints[i].split('_')[0]
+                            loc_feat = keypoints[i].split('_')[1]
+                            bias1 += bias_table[resol][loc_feat][key]
+                            bias2 += bias_table[resol][loc_feat][key2]
                         
                         n = np_val2.shape[0]
                         adjusted_val2 = np.concatenate(((np_val2[:,0] + bias1).reshape(n, -1), (np_val2[:,1] + bias2).reshape(n, -1)), axis=1)
                         
-                        # adjusted_val2 = np.array([np_val2[0] + bias1 * idx, np_val2[1] + bias2 * idx])
-                        
                         if len(merged_matches[key][key2]) == 0:
                             merged_matches[key][key2].append(adjusted_val2)
                         else:
-                            merged_matches[key][key2][0] = np.concatenate([merged_matches[key][key2][0], adjusted_val2])                        
+                            merged_matches[key][key2][0] = np.concatenate([merged_matches[key][key2][0], adjusted_val2])
     # print(merged_matches)  # print merged_matches for checking
             
     # Save ensemble results
@@ -953,13 +928,6 @@ def ensemble_matches(keypoints, matches, ensemble_keypoints='ensemble_keypoints.
         for fname, data in merged_keypoints.items():
             keypoints_out.create_dataset(fname, data=data)  # use data directly
 
-    # with h5py.File(os.path.join(ensemble_output_dir, ensemble_matches), 'w') as matches_out:
-    #     for fname1, data1 in merged_matches.items():
-    #         group = matches_out.create_group(fname1)
-    #         for fname2, data2 in data1.items():
-    #             group.create_dataset(fname2, data=np.vstack(data2))  # vertically stack the numpy arrays before saving
-    
-                    
     with h5py.File(os.path.join(ensemble_output_dir, ensemble_matches), 'w') as matches_out:
         for fname1, data1 in merged_matches.items():
             group = matches_out.create_group(fname1)
@@ -968,7 +936,6 @@ def ensemble_matches(keypoints, matches, ensemble_keypoints='ensemble_keypoints.
                     group.create_dataset(fname2, data=np.concatenate(data2))  # concatenate the numpy arrays before saving
                 else:
                     group.create_dataset(fname2, data=data2[0])
-
 
 
 def import_into_colmap(img_dir,
@@ -987,8 +954,8 @@ def import_into_colmap(img_dir,
     return
 
 # Function to create a submission file.
-def create_submission(out_results, data_dict, output_submission):    
-    with open(output_submission, 'w') as f:
+def create_submission(out_results, data_dict):    
+    with open(f'submission.csv', 'w') as f:
         f.write('image_path,dataset,scene,rotation_matrix,translation_vector\n')
         for dataset in data_dict:
             if dataset in out_results:
@@ -1009,10 +976,10 @@ def create_submission(out_results, data_dict, output_submission):
                         R = np.eye(3).reshape(-1)
                         T = np.zeros((3))
                     f.write(f'{image},{dataset},{scene},{arr_to_str(R)},{arr_to_str(T)}\n')
-                    
+
 # Get data from csv.
 data_dict = {}
-with open(f'{src}/{table_submission}', 'r') as f:
+with open(f'{src}/{lables_csv}.csv', 'r') as f:
     for i, l in enumerate(f):
         # Skip header.
         if l and i > 0:
@@ -1022,18 +989,17 @@ with open(f'{src}/{table_submission}', 'r') as f:
             if scene not in data_dict[dataset]:
                 data_dict[dataset][scene] = []
             data_dict[dataset][scene].append(image)
-            
+
 for dataset in data_dict:
     for scene in data_dict[dataset]:
         print(f'{dataset} / {scene} -> {len(data_dict[dataset][scene])} images')
-        
+
 out_results = {}
 timings = {"shortlisting":[],
            "feature_detection": [],
            "feature_matching":[],
            "RANSAC": [],
            "Reconstruction": []}
-
 gc.collect()
 datasets = []
 for dataset in data_dict:
@@ -1070,16 +1036,17 @@ for dataset in datasets:
             gc.collect()
             t=time()
             
-            for local_feature in local_features:
-                for resolution in resolutions:                     
+            for local_feature in features_resolutions:
+                for resolution in features_resolutions[local_feature]:
+                    print(f"Got {local_feature} & {resolution}")
                     if local_feature != 'LoFTR':
                         keypoints_name = detect_features(img_fnames,
                             num_feats = num_feats,
                             upright = False,
                             device=device,
-                            feature_dir = feature_dir,
-                            local_feature = local_feature,
-                            resolution = resolution
+                            feature_dir=feature_dir,
+                            local_feature=local_feature,
+                            resolution=resolution 
                             )
                         
                         gc.collect()
@@ -1089,12 +1056,10 @@ for dataset in datasets:
                         t=time()
                         
                         matches_name = match_features(img_fnames, index_pairs, feature_dir=feature_dir, device=device,
-                                                      min_matches=min_matches, matching_alg="adalam",
-                                                      local_feature=local_feature, resolution=resolution)
-                        
-                        # match_features(img_fnames, index_pairs, feature_dir=feature_dir, matching_alg="adalam", local_features=local_features, device=device)                
+                                                      min_matches=min_matches, matching_alg=matching_alg,
+                                                      local_feature=local_feature, resolution=resolution)                
                     elif local_feature == 'LoFTR': 
-                        matches_name, keypoints_name = match_loftr(img_fnames,
+                        keypoints_name, matches_name = match_loftr(img_fnames,
                                                                    index_pairs, 
                                                                    feature_dir=feature_dir, 
                                                                    min_matches=min_matches,
@@ -1131,24 +1096,24 @@ for dataset in datasets:
                 keypoints_name = 'ensemble_keypoints.h5'
                 matches_name = 'ensemble_matches.h5'
                 
-                ensemble_matches(keypoints, matches, ensemble_keypoints=keypoints_name, ensemble_matches=matches_name, ensemble_output_dir=feature_dir)   
-            
+                ensemble_keypoint_matches(keypoints, matches, ensemble_keypoints=keypoints_name, ensemble_matches=matches_name, 
+                                 ensemble_output_dir=feature_dir)
             
             t=time() -t 
             timings['feature_matching'].append(t)
             print(f'Features matched in  {t:.4f} sec')
             
             database_path = f'{feature_dir}/colmap.db'
-            print(database_path)
             if os.path.isfile(database_path):
                 os.remove(database_path)
             gc.collect()
+            print(f'{keypoints_name} / {matches_name}')
             import_into_colmap(img_dir, 
                                feature_dir=feature_dir,
                                database_path=database_path, 
                                keypoints_name=keypoints_name, 
                                matches_name=matches_name)
-            output_path = f'{feature_dir}/colmap_rec_{local_features}'
+            output_path = f'{feature_dir}/colmap_rec'
 
             t=time()
             pycolmap.match_exhaustive(database_path)
@@ -1161,22 +1126,20 @@ for dataset in datasets:
             # By default colmap does not generate a reconstruction if less than 10 images are registered. Lower it to 3.
             mapper_options = pycolmap.IncrementalMapperOptions()
             # print(dir(mapper_options))
-            mapper_options.num_threads = num_threads                              # 병렬처리를 위한 스레드 수를 설정 /defualt -1 (-1은 사용 가능한 모든 코어를 사용하도록 지시)
-            mapper_options.max_num_models = max_num_models                        # 처리할 수 있는 최대 모델 수를 설정 /defualt 50
-            mapper_options.ba_local_num_images = ba_local_num_images              # local bundle adjustment 단계에서 고려할 이미지의 수 /defualt 6
-            mapper_options.ba_global_images_freq = ba_global_images_freq          # 몇 개의 이미지가 처리된 후에 global bundle adjustment을 수행할 것인지를 결정 /defualt 500
-            mapper_options.ba_global_points_freq = ba_global_points_freq          # 몇 개의 3D 점이 처리된 후에 global bundle adjustment을 수행할 것인지를 결정 /defualt 250000
-            mapper_options.init_num_trials = init_num_trials                      # 초기 모델을 찾는 데 사용되는 RANSAC 반복 횟수 /defualt 200
-            mapper_options.min_num_matches = min_num_matches                      # Set the minimum number of matches /defualt 15
-            mapper_options.min_model_size = min_model_size                        # RANSAC (RANdom SAmple Consensus) 알고리즘을 적용할 때 필요한 최소한의 데이터 포인트 수 /defualt 10
-            mapper_options.ba_global_max_num_iterations = ba_global_max_num_iterations  # Set the maximum number of global bundle adjustment iterations /defualt 50
-
+            mapper_options.num_threads = num_threads                    
+            mapper_options.max_num_models = max_num_models              
+            mapper_options.ba_local_num_images = ba_local_num_images    
+            mapper_options.ba_global_images_freq = ba_global_images_freq
+            mapper_options.ba_global_points_freq = ba_global_points_freq
+            mapper_options.init_num_trials = init_num_trials            
+            mapper_options.min_num_matches = min_num_matches            
+            mapper_options.min_model_size = min_model_size              
+            
             os.makedirs(output_path, exist_ok=True)
             
             maps = pycolmap.incremental_mapping(database_path=database_path, image_path=img_dir, output_path=output_path, options=mapper_options)
             print(maps)
             
-            #clear_output(wait=False)
             t=time() - t
             timings['Reconstruction'].append(t)
             print(f'Reconstruction done in  {t:.4f} sec')
@@ -1198,7 +1161,7 @@ for dataset in datasets:
                     out_results[dataset][scene][key1]["t"] = deepcopy(np.array(im.tvec))
             print(f'Registered: {dataset} / {scene} -> {len(out_results[dataset][scene])} images')
             print(f'Total: {dataset} / {scene} -> {len(data_dict[dataset][scene])} images')
-            create_submission(out_results, data_dict, output_submission=output_submission)
+            create_submission(out_results, data_dict)
             gc.collect()
             
         # except:
@@ -1207,5 +1170,31 @@ for dataset in datasets:
         except Exception as e:
             print(f"An error occurred during the second loop: {e}")
             traceback.print_exc()
-        
-create_submission(out_results, data_dict, output_submission=output_submission)
+
+create_submission(out_results, data_dict)
+print(f"Review configs: {features_resolutions}")
+print(f'model_name: {model_name}')
+print(f'checkpoint_path: {checkpoint_path}')
+print(f'num_feats: {num_feats}, matching_alg: {matching_alg}, min_matches: {min_matches}')
+
+import evaluation
+
+rotation_thresholds_degrees_dict = {
+    **{('haiper', scene): np.linspace(1, 10, 10) for scene in ['bike', 'chairs', 'fountain']},
+    **{('heritage', scene): np.linspace(1, 10, 10) for scene in ['cyprus', 'dioscuri']},
+    **{('heritage', 'wall'): np.linspace(0.2, 10, 10)},
+    **{('urban', 'kyiv-puppet-theater'): np.linspace(1, 10, 10)},
+}
+
+translation_thresholds_meters_dict = {
+    **{('haiper', scene): np.geomspace(0.05, 0.5, 10) for scene in ['bike', 'chairs', 'fountain']},
+    **{('heritage', scene): np.geomspace(0.1, 2, 10) for scene in ['cyprus', 'dioscuri']},
+    **{('heritage', 'wall'): np.geomspace(0.05, 1, 10)},
+    **{('urban', 'kyiv-puppet-theater'): np.geomspace(0.5, 5, 10)},
+}
+
+evaluation.eval_submission(submission_csv_path='submission.csv',
+                ground_truth_csv_path=f'/home/user/Repositories/IMC_innopam/data/image-matching-challenge-2023/ground_truth_{dataset_scene}.csv',
+                rotation_thresholds_degrees_dict=rotation_thresholds_degrees_dict,
+                translation_thresholds_meters_dict=translation_thresholds_meters_dict,
+                verbose=True)

@@ -173,11 +173,3 @@ translation_thresholds_meters_dict = {
     **{('heritage', 'wall'): np.geomspace(0.05, 1, 10)},
     **{('urban', 'kyiv-puppet-theater'): np.geomspace(0.5, 5, 10)},
 }
-
-# Generate and evaluate a random submission.
-
-eval_submission(submission_csv_path='/home/jhun/IMC_innopam/submission.csv',
-                ground_truth_csv_path='/home/jhun/IMC_innopam/ground_truth_all_class.csv',
-                rotation_thresholds_degrees_dict=rotation_thresholds_degrees_dict,
-                translation_thresholds_meters_dict=translation_thresholds_meters_dict,
-                verbose=True)
