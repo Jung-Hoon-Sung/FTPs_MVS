@@ -38,7 +38,7 @@ features_resolutions = {
     # features: 'LoFTR', 'DISK', 'KeyNetAffNetHardNet'
     # resolutions: [600, 840, 1024]
     'KeyNetAffNetHardNet': [1696],
-    'DISK': [1536]
+    'DISK': [1024]
 }
 ENSEMBLE = any(len(resolutions) > 1 for resolutions in features_resolutions.values()) or len(features_resolutions) > 1
 
@@ -71,7 +71,7 @@ if MODE == "train":
     src2 = 'train' # 'train', 'test'
     src3 = 'images'
     featureout = 'featureout'
-    lables_csv = 'train_labels_heritage_cyprus'
+    lables_csv = 'ground_truth_heritage_cyprus'
     dataset_scene = 'heritage_cyprus'
     # lables_csv = 'train_labels_haiper_chairs'
     # dataset_scene = 'haiper_chairs'
