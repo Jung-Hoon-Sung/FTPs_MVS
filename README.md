@@ -40,6 +40,8 @@ python3 main.py
 ```
 - example url: `http://192.168.0.88:7000/docs`으로 접속
 
+## Sample datasets for test
+- download link : https://drive.google.com/drive/folders/1IJC0Z1XyOr7E0StbeYWvPn4uTHxHIXwf?usp=drive_link
 ## Step1 Automaic_marker_generation_endpoint
 
 Automaic_marker_generation_endpoint는 다음과 같이 작업하십시오:
