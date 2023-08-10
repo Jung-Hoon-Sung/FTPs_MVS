@@ -83,9 +83,13 @@ Automaic_marker_generation_endpoint는 다음과 같이 작업하십시오:
 
 
 ## Step 2 download_file
-
 - **format_type**: 반환하려는 파일 형식을 지정합니다. 사용 가능한 값은 'RealityCapture' 또는 'MetaShape'입니다.
     - 'RealityCapture': RealityCapture csv형식의 파일을 다운로드합니다.
     - 'MetaShape': MetaShape csv형식의 파일을 다운로드합니다.
+ 
+## Other works
+- The user can obtain the marker csv format required for Metashape.
+- This can be customized by using the `import_csv_marker.py` script in MetaShape GUI, and the method is as follows:
+- Append `import_csv_marker.py` to MetaShape GUI Console/Run Script. Then, a Custom menu will be created at the top. You just need to insert `python3 DL_based_auto_marker.py` into the newly created Custom menu.
 
 
