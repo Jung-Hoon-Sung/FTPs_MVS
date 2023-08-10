@@ -34,7 +34,7 @@ docker run --gpus all -it --name auto_markers_api -v <your/local/directory/data>
 ```
 cd app
 ```
-## Fast-api run
+## Fast-API run
 ```bash
 python3 main.py
 ```
