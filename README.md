@@ -40,7 +40,7 @@ docker run --gpus all -it --name auto_markers \
 -p 7000:80 \
 -e DISPLAY=$DISPLAY \
 -v /tmp/.X11-unix:/tmp/.X11-unix \
-auto_marker bash
+auto_marker_api bash
 ```
 ```
 cd app
