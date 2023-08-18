@@ -39,7 +39,7 @@ async def Automaic_marker_generation_endpoint(
         sosnet_path: str = Query('/data/weights/sosnet_32x32_liberty.pth', description="Path to SOSNet file"),
         disk_path: str = Query('/data/weights/epipolar-save.pth', description="Path to DISK file"),
         loftr_path: str = Query('/data/weights/outdoor_ds.ckpt', description="Path to LoFTR file"),
-        features_resolutions: List[str] = Query(['KeyNetAffNetHardNet:1920'], description="List of features and resolutions"),
+        features_resolutions: List[str] = Query(['KeyNetAffNetHardNet:2088'], description="List of features and resolutions"),
         num_feats: Optional[int] = 40000,
         output_csv_rc: str = Query('/data/converted_RC_CP.csv', description="Path to output csv file for RC_CP format"),
         output_csv_ms: str = Query('/data/converted_MS_Marker.csv', description="Path to output csv file for MS_Marker format"),
