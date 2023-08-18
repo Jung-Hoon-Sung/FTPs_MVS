@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import csv
 from sklearn.metrics import mean_squared_error
+matplotlib.use('TkAgg')
 
 @dataclass
 class Camera:
