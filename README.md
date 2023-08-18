@@ -31,7 +31,7 @@ docker run --gpus all -it --name auto_markers_api -v <your/local/directory/data>
 ```
 - docker run example: `docker run --gpus all -it --name auto_markers_api -v /media/jhun/4TBHDD/auto_marker_docker_data/data:/data -p 7000:80 auto_marker_api bash`
 
-- docker run example2: When you want matplotlib visualization create a container like this
+- docker run example2: When using `mAA_calculate.py`, matplotlib visualization can be implemented together. When you want to do this, do it like this:
 ```bash
 xhost +local:docker
 
