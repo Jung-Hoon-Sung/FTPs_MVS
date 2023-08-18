@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Update and install required packages and cleanup in one RUN to reduce image size
 RUN apt-get update && apt-get install -y software-properties-common && \
     add-apt-repository ppa:deadsnakes/ppa && apt-get update && \
-    apt-get install -y python3.8 python3-pip libgl1-mesa-dev libglib2.0-0 && \
+    apt-get install -y python3.8 python3-pip libgl1-mesa-dev libglib2.0-0 python3-tk && \
     rm -rf /var/lib/apt/lists/* && \
     # Reset the frontend back to its normal state
     DEBIAN_FRONTEND=""
