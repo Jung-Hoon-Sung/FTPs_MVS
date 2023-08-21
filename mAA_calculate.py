@@ -329,6 +329,29 @@ def create_dicts_from_csv(filename):
         data_dict[image_name] = {'rotmat': rotmat, 'tvec': tvec}
     return data_dict
 
+def compute_errors(gt, pred, columns):
+    errors = gt[columns].subtract(pred[columns])
+    sq_errors = errors ** 2
+
+    stats = {
+        'mean': errors.mean(),
+        'std': errors.std(),
+        'min': errors.min(),
+        'max': errors.max()
+    }
+
+    rmse = np.sqrt(sq_errors.mean())
+
+    return rmse, stats
+
+def display_stats(stats, columns):
+    for col in columns:
+        min_value = round(stats['min'][col], 4)
+        max_value = round(stats['max'][col], 4)
+        mean_value = round(stats['mean'][col], 4)
+        std_value = round(stats['std'][col], 4)
+        print(f"{col:<10}: Min: {min_value:>8}, Max: {max_value:>8}, Mean: {mean_value:>8}, Std: {std_value:>8}")
+        
 def main(pred_csv_path, gt_csv_path, save_base_path):
     rotation_thresholds_degrees = np.linspace(0.2, 10, 10)
     translation_thresholds_meters = np.geomspace(0.05, 1, 10)
@@ -448,154 +471,51 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
     # Ensure GT and predicted values are in the same order
     assert (gt['#name'] == pred['#name']).all()
 
-    # Compute RMSE per image
-    diff = gt.loc[:, 'x':'kappa'].subtract(pred.loc[:, 'x':'kappa'])
-
-    sq_diff = diff ** 2
-    mean_sq_diff_per_image = sq_diff.mean(axis=1)
-    rmse_per_image = np.sqrt(mean_sq_diff_per_image)
-
-    # Compute errors for each feature
-    errors = gt.loc[:, 'x':'kappa'].subtract(pred.loc[:, 'x':'kappa'])
-
-    # Compute RMSE for each feature
-    sq_errors = errors ** 2
-    rmse_errors = np.sqrt(sq_errors.mean())
-
-    print("\nRMSE for each feature:")
-    for index, value in rmse_errors.items():
-        print(f"{index:<10} {round(value, 4)}")
-
-    # Calculate the square root of the sum of the squares of the errors for x, y, z
-    sq_errors_xyz = sq_errors[['x', 'y', 'z']].sum(axis=1)
-    rmse_xyz = np.sqrt(sq_errors_xyz.mean())
-    print("RMSE (sqrt(sum(X^2 + Y^2 + Z^2))):", round(rmse_xyz, 4))
-
-    # Calculate the square root of the sum of the squares of the errors for 'omega', 'phi', 'kappa'
-    print(sq_errors.columns)
-    sq_errors_rph = sq_errors[['omega', 'phi', 'kappa']].sum(axis=1)
-    rmse_rph = np.sqrt(sq_errors_rph.mean())
-    print("RMSE (sqrt(sum(omega^2 + phi^2 + kappa^2))):", round(rmse_rph, 4))
-
-    errors_xyz = errors[['x', 'y', 'z']]
-    errors_rph = errors[['omega', 'phi', 'kappa']]
-
-    # Calculate the mean, std, min, max for x, y, z
-    stats_mean_xyz = errors_xyz.mean()
-    stats_std_xyz = errors_xyz.std()
-    stats_min_xyz = errors_xyz.min()
-    stats_max_xyz = errors_xyz.max()
-
-    # Calculate the mean, std, min, max for 'omega', 'phi', 'kappa'
-    stats_mean_rph = errors_rph.mean()
-    stats_std_rph = errors_rph.std()
-    stats_min_rph = errors_rph.min()
-    stats_max_rph = errors_rph.max()
-    # print(errors.columns)
-
-    print("\nStats for Mean of x, y, z Errors:")
-    total_min_xyz = 0
-    total_max_xyz = 0
-    total_mean_xyz = 0
-    total_std_xyz = 0
-    for index in ['x', 'y', 'z']:
-        min_value = round(stats_min_xyz[index], 4)
-        max_value = round(stats_max_xyz[index], 4)
-        mean_value = round(stats_mean_xyz[index], 4)
-        std_value = round(stats_std_xyz[index], 4)
-        total_min_xyz += min_value
-        total_max_xyz += max_value
-        total_mean_xyz += mean_value
-        total_std_xyz += std_value
-        print(f"{index:<10}: Min: {min_value:>8}, Max: {max_value:>8}, Mean: {mean_value:>8}, Std: {std_value:>8}")
-    print(f"Total mean: Min: {round(total_min_xyz/3, 4):>8}, Max: {round(total_max_xyz/3, 4):>8}, Mean: {round(total_mean_xyz/3, 4):>8}, Std: {round(total_std_xyz/3, 4):>8}")
-
-    print("\nStats for Mean of 'omega', 'phi', 'kappa' Errors:")
-    total_min_rph = 0
-    total_max_rph = 0
-    total_mean_rph = 0
-    total_std_rph = 0
-    for index in ['omega', 'phi', 'kappa']:
-        min_value = round(stats_min_rph[index], 4)
-        max_value = round(stats_max_rph[index], 4)
-        mean_value = round(stats_mean_rph[index], 4)
-        std_value = round(stats_std_rph[index], 4)
-        total_min_rph += min_value
-        total_max_rph += max_value
-        total_mean_rph += mean_value
-        total_std_rph += std_value
-        print(f"{index:<10}: Min: {min_value:>8}, Max: {max_value:>8}, Mean: {mean_value:>8}, Std: {std_value:>8}")
-    print(f"Total mean: Min: {round(total_min_rph/3, 4):>8}, Max: {round(total_max_rph/3, 4):>8}, Mean: {round(total_mean_rph/3, 4):>8}, Std: {round(total_std_rph/3, 4):>8}")
-
     # Calculate errors
-    errors = abs(gt[['x', 'y', 'z', 'omega', 'phi', 'kappa']] - pred[['x', 'y', 'z', 'omega', 'phi', 'kappa']])
+    errors = gt[['x', 'y', 'z', 'omega', 'phi', 'kappa']] - pred[['x', 'y', 'z', 'omega', 'phi', 'kappa']]
 
-    # For each column, get the indices of the five largest errors
-    # print("Images with maximum errors:")
-    # for column in errors.columns:
-    #     max_error_indices = errors[column].nlargest(5).index
-    #     print(f"{column:<10}:")
-    # for idx in max_error_indices:
-    #     image_name = gt.loc[idx, '#name']
-    #     error_value = errors.loc[idx, column]
-    #     print(f"\tImage ID: {image_name}, Error: {error_value:.4f}")
+    # RMSE calculations
+    rmse_values = [
+        np.sqrt(mean_squared_error(gt['x'], pred['x'])),
+        np.sqrt(mean_squared_error(gt['y'], pred['y'])),
+        np.sqrt(mean_squared_error(gt['z'], pred['z'])),
+        np.sqrt(mean_squared_error(gt['omega'], pred['omega'])),
+        np.sqrt(mean_squared_error(gt['phi'], pred['phi'])),
+        np.sqrt(mean_squared_error(gt['kappa'], pred['kappa']))
+    ]
 
-    # Create DataFrame for RMSE for each feature
-    rmse_df = rmse_errors.reset_index()
-    rmse_df.columns = ['Feature', 'RMSE']
-    rmse_df['RMSE'] = rmse_df['RMSE'].round(4)
+    # SQRT(SUMSQ) calculations
+    sqrt_sumsq_xyz = np.sqrt(sum([rmse_values[i]**2 for i in range(3)]))
+    sqrt_sumsq_omega_phi_kappa = np.sqrt(sum([rmse_values[i]**2 for i in range(3, 6)]))
 
-    # Create DataFrame for x, y, z errors
-    errors_xyz_df = errors[['x', 'y', 'z']].copy()
-    errors_xyz_df['#name'] = gt['#name']
-    errors_xyz_df.set_index('#name', inplace=True)
-    errors_xyz_df.columns = ['X Error', 'Y Error', 'Z Error']
+    # Metrics dictionary
+    stats = {
+        "Min": errors.min(),
+        "Max": errors.max(),
+        "Mean": errors.mean(),
+        "Std": errors.std(),
+        "RMSE": rmse_values,
+        "SQRT(SUMSQ)": [sqrt_sumsq_xyz, np.nan, np.nan, sqrt_sumsq_omega_phi_kappa, np.nan, np.nan]
+    }
 
-    # RMSE for x, y, z errors
-    rmse_xyz = pd.DataFrame({
-    'X Error': [np.sqrt(mean_squared_error(gt['x'], pred['x']))],
-    'Y Error': [np.sqrt(mean_squared_error(gt['y'], pred['y']))],
-    'Z Error': [np.sqrt(mean_squared_error(gt['z'], pred['z']))]
-    }, index=['RMSE'])
+    # ASCII table formatting
+    separator = "+-------+" + "+---------------------" * 6 + "+"
+    print(separator)
+    print("|       |", " | ".join([f"{x}_error".ljust(20) for x in ["x", "y", "z", "omega", "phi", "kappa"]]), "|")
+    print(separator)
 
-    # Concatenate the RMSE row to the DataFrame
-    errors_xyz_df = pd.concat([errors_xyz_df, rmse_xyz])
+    for metric in ["Min", "Max", "Mean", "Std", "RMSE", "SQRT(SUMSQ)"]:
+        if metric != "SQRT(SUMSQ)":
+            print("|", metric.ljust(5), "|", " | ".join([f"{stats[metric][i]:<20.10f}" if not np.isnan(stats[metric][i]) else ' '.ljust(20) for i in range(6)]), "|")
+            print(separator)
+        else:
+            # 여기서 "SQRT(SUMSQ)" 행을 원하는 방식으로 표현하세요.
+            custom_representation = "| -----------------------SQRT(SUMSQ)_x, y, z |"
+            custom_representation += f" {stats['SQRT(SUMSQ)'][0]:<20.10f} | -----------------------SQRT(SUMSQ)_omega, phi, kappa | {stats['SQRT(SUMSQ)'][3]:<20.10f} |"
+            print(custom_representation)
+            print(separator)
 
-    # Stats for x, y, z errors
-    stats_xyz_df = pd.DataFrame({
-    'Metric': ['Min', 'Max', 'Mean', 'Std'],
-    'X Error': [stats_min_xyz['x'], stats_max_xyz['x'], stats_mean_xyz['x'], stats_std_xyz['x']],
-    'Y Error': [stats_min_xyz['y'], stats_max_xyz['y'], stats_mean_xyz['y'], stats_std_xyz['y']],
-    'Z Error': [stats_min_xyz['z'], stats_max_xyz['z'], stats_mean_xyz['z'], stats_std_xyz['z']],
-    }).set_index('Metric').round(4) 
-
-    # Concatenate the stats row to the DataFrame and save to CSV
-    errors_xyz_df = pd.concat([errors_xyz_df, stats_xyz_df])
-    # errors_xyz_df.to_csv('/media/jhun/4TBHDD/downloads/RMSE_calculate/output/errors_xyz.csv', mode='a')
-
-    # Create DataFrame for 'omega', 'phi', 'kappa' errors
-    errors_rph_df = errors[['omega', 'phi', 'kappa']].copy()
-    errors_rph_df['#name'] = gt['#name']
-    errors_rph_df.set_index('#name', inplace=True)
-    errors_rph_df.columns = ['omeaga Error', 'phi Error', 'kappa Error']
-
-    # RMSE for 'omega', 'phi', 'kappa' errors
-    rmse_rph = pd.DataFrame({
-    'omega Error': [np.sqrt(mean_squared_error(gt['omega'], pred['omega']))],
-    'phi Error': [np.sqrt(mean_squared_error(gt['phi'], pred['phi']))],
-    'kappa Error': [np.sqrt(mean_squared_error(gt['kappa'], pred['kappa']))]
-    }, index=['RMSE'])
-
-    # Concatenate the RMSE row to the DataFrame
-    errors_rph_df = pd.concat([errors_rph_df, rmse_rph])
-
-    stats_rph_df = pd.DataFrame({
-    'Metric': ['Min', 'Max', 'Mean', 'Std'],
-    'omega Error': [stats_min_rph['omega'], stats_max_rph['omega'], stats_mean_rph['omega'], stats_std_rph['omega']],
-    'phi Error': [stats_min_rph['phi'], stats_max_rph['phi'], stats_mean_rph['phi'], stats_std_rph['phi']],
-    'kappa Error': [stats_min_rph['kappa'], stats_max_rph['kappa'], stats_mean_rph['kappa'], stats_std_rph['kappa']]
-    }).set_index('Metric').round(4) 
-
+    
 base_path = "/media/jhun/4TBHDD/downloads"
 # pred_csv = base_path + "/test_autodrone202_automarker_laser_H_P_R.csv"
 # gt_csv = base_path + "/test_autodrone202_M_marker_laser_H_P_R.csv"
