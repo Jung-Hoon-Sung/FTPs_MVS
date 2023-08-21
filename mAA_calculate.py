@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import csv
 from sklearn.metrics import mean_squared_error
-matplotlib.use('TkAgg')
+# matplotlib.use('TkAgg')
 
 @dataclass
 class Camera:
@@ -62,10 +62,10 @@ def quaternion_from_matrix(matrix): # 회전 매트릭스를 쿼터니언 형태
     K /= 3.0
 
     # Quaternion is eigenvector of K that corresponds to largest eigenvalue.
-    w, V = np.linalg.eigh(K)
+    w, V = np.linalg.eigh(K) # np.linalg.eigh = 행렬의 고유값과 고유벡터를 계산하는 함수
     q = V[[3, 0, 1, 2], np.argmax(w)]
 
-    if q[0] < 0.0:
+    if q[0] < 0.0: # 부호의 중복성을 없애기 위해 항상 양수가 되도록 하기 위함 
         np.negative(q, q)
     return q
 
@@ -109,7 +109,7 @@ def dict_from_eo_csv(csv_path):
     data = pd.read_csv(csv_path, skiprows=1, header=0)
     eo_dict = {}
     for idx, row in data.iterrows():
-        R = euler_to_rotation_matrix(row['heading'], row['pitch'], row['roll'])
+        R = euler_to_rotation_matrix(row['omega'], row['phi'], row['kappa'])
         T = np.array([row['x'], row['y'], row['z']])
         eo_dict[row['#name']] = Camera(rotmat=R, tvec=T)
     return eo_dict
@@ -204,6 +204,30 @@ def quaternion_to_euler(q):
     
     return roll_x, pitch_y, yaw_z  # in radians
 
+# def quaternion_to_euler(q):
+#     """
+#     Convert a quaternion into euler angles (yaw, pitch, roll)
+#     yaw is rotation around z in radians (counterclockwise)
+#     pitch is rotation around y in radians (counterclockwise)
+#     roll is rotation around x in radians (counterclockwise)
+#     """
+#     x, y, z, w = q
+
+#     t0 = +2.0 * (w * z + x * y)
+#     t1 = +1.0 - 2.0 * (x * x + y * y)
+#     yaw_z = math.atan2(t0, t1)
+
+#     t2 = +2.0 * (w * y - x * z)
+#     t2 = +1.0 if t2 > +1.0 else t2
+#     t2 = -1.0 if t2 < -1.0 else t2
+#     pitch_y = math.asin(t2)
+
+#     t3 = +2.0 * (w * x + y * z)
+#     t4 = +1.0 - 2.0 * (y * y + z * z)
+#     roll_x = math.atan2(t3, t4)
+
+#     return yaw_z, pitch_y, roll_x  # in radians
+
 def generate_corrected_eo(data_dict):
     corrected_eo = {}
     for image, camera in data_dict.items():
@@ -215,9 +239,9 @@ def generate_corrected_eo(data_dict):
             'x': camera.tvec[0],
             'y': camera.tvec[1],
             'z': camera.tvec[2],
-            'heading': yaw,     # Assuming heading corresponds to z
-            'pitch': pitch,    # Assuming pitch corresponds to y
-            'roll': roll       # Assuming roll corresponds to x
+            'omega': roll,    
+            'phi': pitch,    
+            'kappa': yaw      
         }
     return corrected_eo
 
@@ -225,9 +249,9 @@ def save_corrected_eo_to_csv(eo_dict, path):
     with open(path, 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['#camera'])  # 이 행을 추가
-        writer.writerow(['#name', 'X', 'Y', 'Z', 'Heading', 'Pitch', 'Roll'])
+        writer.writerow(['#name', 'X', 'Y', 'Z', 'omega', 'Phi', 'kappa'])
         for image, values in eo_dict.items():
-            writer.writerow([image, values['x'], values['y'], values['z'], values['heading'], values['pitch'], values['roll']])
+            writer.writerow([image, values['x'], values['y'], values['z'], values['omega'], values['phi'], values['kappa']])
     return path
 
     
@@ -350,12 +374,12 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
     pred_save_path = save_base_path + "/pred_rot_trans_matrices.csv"
     gt_save_path = save_base_path + "/gt_rot_trans_matrices.csv"
 
-    # save_all_matrices_to_csv(
-    #     pred_dict,
-    #     gt_dict,
-    #     pred_save_path,
-    #     gt_save_path
-    # )
+    save_all_matrices_to_csv(
+        pred_dict,
+        gt_dict,
+        pred_save_path,
+        gt_save_path
+    )
     
     gt_corrected_eo = generate_corrected_eo(gt_dict)
     pred_corrected_eo = generate_corrected_eo(pred_dict)
@@ -393,9 +417,9 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
 
     pd.set_option('display.float_format', '{:.4f}'.format)
     # Read GT and prediction CSV files
-    gt = pd.read_csv(gt_eo, comment='#', skiprows=[1], header=None, names=['#name', 'x', 'y', 'z', 'heading', 'pitch', 'roll'])
+    gt = pd.read_csv(gt_eo, comment='#', skiprows=[1], header=None, names=['#name', 'x', 'y', 'z', 'omega', 'phi', 'kappa'])
     # print(gt)
-    pred = pd.read_csv(pred_eo, comment='#', skiprows=[1], header=None, names=['#name', 'x', 'y', 'z', 'heading', 'pitch', 'roll'])
+    pred = pd.read_csv(pred_eo, comment='#', skiprows=[1], header=None, names=['#name', 'x', 'y', 'z', 'omega', 'phi', 'kappa'])
     # print(pred)
 
     # Sort the dataframes by the image ID
@@ -413,7 +437,7 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
     assert (gt['#name'] == pred['#name']).all()
 
     # Only keep necessary columns
-    necessary_columns = ['#name', 'x', 'y', 'z', 'heading', 'pitch', 'roll']
+    necessary_columns = ['#name', 'x', 'y', 'z', 'omega', 'phi', 'kappa']
     gt = gt[necessary_columns]
     pred = pred[necessary_columns]
 
@@ -425,14 +449,14 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
     assert (gt['#name'] == pred['#name']).all()
 
     # Compute RMSE per image
-    diff = gt.loc[:, 'x':'roll'].subtract(pred.loc[:, 'x':'roll'])
+    diff = gt.loc[:, 'x':'kappa'].subtract(pred.loc[:, 'x':'kappa'])
 
     sq_diff = diff ** 2
     mean_sq_diff_per_image = sq_diff.mean(axis=1)
     rmse_per_image = np.sqrt(mean_sq_diff_per_image)
 
     # Compute errors for each feature
-    errors = gt.loc[:, 'x':'roll'].subtract(pred.loc[:, 'x':'roll'])
+    errors = gt.loc[:, 'x':'kappa'].subtract(pred.loc[:, 'x':'kappa'])
 
     # Compute RMSE for each feature
     sq_errors = errors ** 2
@@ -447,13 +471,14 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
     rmse_xyz = np.sqrt(sq_errors_xyz.mean())
     print("RMSE (sqrt(sum(X^2 + Y^2 + Z^2))):", round(rmse_xyz, 4))
 
-    # Calculate the square root of the sum of the squares of the errors for roll, pitch, heading
-    sq_errors_rph = sq_errors[['roll', 'pitch', 'heading']].sum(axis=1)
+    # Calculate the square root of the sum of the squares of the errors for 'omega', 'phi', 'kappa'
+    print(sq_errors.columns)
+    sq_errors_rph = sq_errors[['omega', 'phi', 'kappa']].sum(axis=1)
     rmse_rph = np.sqrt(sq_errors_rph.mean())
-    print("RMSE (sqrt(sum(roll^2 + pitch^2 + heading^2))):", round(rmse_rph, 4))
+    print("RMSE (sqrt(sum(omega^2 + phi^2 + kappa^2))):", round(rmse_rph, 4))
 
     errors_xyz = errors[['x', 'y', 'z']]
-    errors_rph = errors[['roll', 'pitch', 'heading']]
+    errors_rph = errors[['omega', 'phi', 'kappa']]
 
     # Calculate the mean, std, min, max for x, y, z
     stats_mean_xyz = errors_xyz.mean()
@@ -461,7 +486,7 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
     stats_min_xyz = errors_xyz.min()
     stats_max_xyz = errors_xyz.max()
 
-    # Calculate the mean, std, min, max for roll, pitch, heading
+    # Calculate the mean, std, min, max for 'omega', 'phi', 'kappa'
     stats_mean_rph = errors_rph.mean()
     stats_std_rph = errors_rph.std()
     stats_min_rph = errors_rph.min()
@@ -485,12 +510,12 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
         print(f"{index:<10}: Min: {min_value:>8}, Max: {max_value:>8}, Mean: {mean_value:>8}, Std: {std_value:>8}")
     print(f"Total mean: Min: {round(total_min_xyz/3, 4):>8}, Max: {round(total_max_xyz/3, 4):>8}, Mean: {round(total_mean_xyz/3, 4):>8}, Std: {round(total_std_xyz/3, 4):>8}")
 
-    print("\nStats for Mean of roll, pitch, heading Errors:")
+    print("\nStats for Mean of 'omega', 'phi', 'kappa' Errors:")
     total_min_rph = 0
     total_max_rph = 0
     total_mean_rph = 0
     total_std_rph = 0
-    for index in ['roll', 'pitch', 'heading']:
+    for index in ['omega', 'phi', 'kappa']:
         min_value = round(stats_min_rph[index], 4)
         max_value = round(stats_max_rph[index], 4)
         mean_value = round(stats_mean_rph[index], 4)
@@ -503,7 +528,7 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
     print(f"Total mean: Min: {round(total_min_rph/3, 4):>8}, Max: {round(total_max_rph/3, 4):>8}, Mean: {round(total_mean_rph/3, 4):>8}, Std: {round(total_std_rph/3, 4):>8}")
 
     # Calculate errors
-    errors = abs(gt[['x', 'y', 'z', 'heading', 'pitch', 'roll']] - pred[['x', 'y', 'z', 'heading', 'pitch', 'roll']])
+    errors = abs(gt[['x', 'y', 'z', 'omega', 'phi', 'kappa']] - pred[['x', 'y', 'z', 'omega', 'phi', 'kappa']])
 
     # For each column, get the indices of the five largest errors
     # print("Images with maximum errors:")
@@ -548,31 +573,32 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
     errors_xyz_df = pd.concat([errors_xyz_df, stats_xyz_df])
     # errors_xyz_df.to_csv('/media/jhun/4TBHDD/downloads/RMSE_calculate/output/errors_xyz.csv', mode='a')
 
-    # Create DataFrame for roll, pitch, heading errors
-    errors_rph_df = errors[['roll', 'pitch', 'heading']].copy()
+    # Create DataFrame for 'omega', 'phi', 'kappa' errors
+    errors_rph_df = errors[['omega', 'phi', 'kappa']].copy()
     errors_rph_df['#name'] = gt['#name']
     errors_rph_df.set_index('#name', inplace=True)
-    errors_rph_df.columns = ['Roll Error', 'Pitch Error', 'Heading Error']
+    errors_rph_df.columns = ['omeaga Error', 'phi Error', 'kappa Error']
 
-    # RMSE for roll, pitch, heading errors
+    # RMSE for 'omega', 'phi', 'kappa' errors
     rmse_rph = pd.DataFrame({
-    'Roll Error': [np.sqrt(mean_squared_error(gt['roll'], pred['roll']))],
-    'Pitch Error': [np.sqrt(mean_squared_error(gt['pitch'], pred['pitch']))],
-    'Heading Error': [np.sqrt(mean_squared_error(gt['heading'], pred['heading']))]
+    'omega Error': [np.sqrt(mean_squared_error(gt['omega'], pred['omega']))],
+    'phi Error': [np.sqrt(mean_squared_error(gt['phi'], pred['phi']))],
+    'kappa Error': [np.sqrt(mean_squared_error(gt['kappa'], pred['kappa']))]
     }, index=['RMSE'])
 
     # Concatenate the RMSE row to the DataFrame
     errors_rph_df = pd.concat([errors_rph_df, rmse_rph])
 
-    # Stats for roll, pitch, heading errors
     stats_rph_df = pd.DataFrame({
     'Metric': ['Min', 'Max', 'Mean', 'Std'],
-    'Roll Error': [stats_min_rph['roll'], stats_max_rph['roll'], stats_mean_rph['roll'], stats_std_rph['roll']],
-    'Pitch Error': [stats_min_rph['pitch'], stats_max_rph['pitch'], stats_mean_rph['pitch'], stats_std_rph['pitch']],
-    'Heading Error': [stats_min_rph['heading'], stats_max_rph['heading'], stats_mean_rph['heading'], stats_std_rph['heading']]
+    'omega Error': [stats_min_rph['omega'], stats_max_rph['omega'], stats_mean_rph['omega'], stats_std_rph['omega']],
+    'phi Error': [stats_min_rph['phi'], stats_max_rph['phi'], stats_mean_rph['phi'], stats_std_rph['phi']],
+    'kappa Error': [stats_min_rph['kappa'], stats_max_rph['kappa'], stats_mean_rph['kappa'], stats_std_rph['kappa']]
     }).set_index('Metric').round(4) 
 
 base_path = "/media/jhun/4TBHDD/downloads"
-pred_csv = base_path + "/test_autodrone202_automarker_laser_H_P_R.csv"
-gt_csv = base_path + "/test_autodrone202_M_marker_laser_H_P_R.csv"
+# pred_csv = base_path + "/test_autodrone202_automarker_laser_H_P_R.csv"
+# gt_csv = base_path + "/test_autodrone202_M_marker_laser_H_P_R.csv"
+pred_csv = base_path + "/230821_auto18_drone_laser_opk.csv"
+gt_csv = base_path + "/230821_autodrone202_Mmarker_laser.csv"
 main(pred_csv, gt_csv, base_path)
