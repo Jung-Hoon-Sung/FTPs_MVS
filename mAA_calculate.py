@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import csv
 from sklearn.metrics import mean_squared_error
+from prettytable import PrettyTable
 # matplotlib.use('TkAgg')
 
 @dataclass
@@ -42,7 +43,7 @@ def rotation_matrix_to_quaternion(R):
         z = 0.25 * s
     return x, y, z, w
  
-def quaternion_from_matrix(matrix): # 회전 매트릭스를 쿼터니언 형태로 변환, 쿼터니언은 3D 회전을 나타내는 수학적 표현 방법
+def quaternion_from_4x4_matrix(matrix): # 회전 매트릭스를 쿼터니언 형태로 변환, 쿼터니언은 3D 회전을 나타내는 수학적 표현 방법
     M = np.array(matrix, dtype=np.float64, copy=False)[:4, :4]
     m00 = M[0, 0]
     m01 = M[0, 1]
@@ -68,6 +69,28 @@ def quaternion_from_matrix(matrix): # 회전 매트릭스를 쿼터니언 형태
     if q[0] < 0.0: # 부호의 중복성을 없애기 위해 항상 양수가 되도록 하기 위함 
         np.negative(q, q)
     return q
+
+def quaternion_from_3x3_matrix(matrix):
+    """
+    Convert a 3x3 rotation matrix to a quaternion.
+    The quaternion is returned as [w, x, y, z].
+    """
+    m = np.array(matrix, dtype=np.float64, copy=False)
+    m00, m01, m02 = m[0, 0], m[0, 1], m[0, 2]
+    m10, m11, m12 = m[1, 0], m[1, 1], m[1, 2]
+    m20, m21, m22 = m[2, 0], m[2, 1], m[2, 2]
+
+    # Compute quaternion elements
+    w = np.sqrt(max(0, 1 + m00 + m11 + m22)) / 2
+    x = np.sqrt(max(0, 1 + m00 - m11 - m22)) / 2
+    y = np.sqrt(max(0, 1 - m00 + m11 - m22)) / 2
+    z = np.sqrt(max(0, 1 - m00 - m11 + m22)) / 2
+
+    x = np.copysign(x, m21 - m12)
+    y = np.copysign(y, m02 - m20)
+    z = np.copysign(z, m10 - m01)
+
+    return np.array([w, x, y, z])
 
 def compute_mAA(err_q, err_t, ths_q, ths_t): # 평균 정확도 계산: 주어진 임계값에 대하여 회전 및 변환의 오차를 평가하고, 각 임계값에 대한 정확도를 계산
     '''Compute the mean average accuracy over a set of thresholds. Additionally returns the metric only over rotation and translation.'''
@@ -120,8 +143,8 @@ def evaluate_R_t(R_gt, t_gt, R, t, eps=1e-15):
 
     # q_gt = rotation_matrix_to_quaternion(R_gt)
     # q = rotation_matrix_to_quaternion(R)
-    q_gt = quaternion_from_matrix(R_gt)
-    q = quaternion_from_matrix(R)
+    q_gt = quaternion_from_4x4_matrix(R_gt)
+    q = quaternion_from_4x4_matrix(R)
     q = q / (np.linalg.norm(q) + eps)
     q_gt = q_gt / (np.linalg.norm(q_gt) + eps)
     loss_q = np.maximum(eps, (1.0 - np.sum(q * q_gt)**2))
@@ -181,67 +204,66 @@ def save_all_matrices_to_csv(pred_dict, gt_dict, pred_csv_path, gt_csv_path):
     save_matrices_to_csv(pred_dict, pred_csv_path)
     save_matrices_to_csv(gt_dict, gt_csv_path)
 
-def quaternion_to_euler(q):
+# def quaternion_to_euler(q):
+#     """
+#     Convert a quaternion into euler angles (roll, pitch, yaw)
+#     roll is rotation around x in radians (counterclockwise)
+#     pitch is rotation around y in radians (counterclockwise)
+#     yaw is rotation around z in radians (counterclockwise)
+#     """
+#     x, y, z, w = q
+#     t0 = +2.0 * (w * x + y * z)
+#     t1 = +1.0 - 2.0 * (x * x + y * y)
+#     roll_x = math.atan2(t0, t1)
+    
+#     t2 = +2.0 * (w * y - z * x)
+#     t2 = +1.0 if t2 > +1.0 else t2
+#     t2 = -1.0 if t2 < -1.0 else t2
+#     pitch_y = math.asin(t2)
+    
+#     t3 = +2.0 * (w * z + x * y)
+#     t4 = +1.0 - 2.0 * (y * y + z * z)
+#     yaw_z = math.atan2(t3, t4)
+    
+#     return roll_x, pitch_y, yaw_z  # in radians
+
+def quaternion_to_opk(q):
     """
-    Convert a quaternion into euler angles (roll, pitch, yaw)
-    roll is rotation around x in radians (counterclockwise)
-    pitch is rotation around y in radians (counterclockwise)
-    yaw is rotation around z in radians (counterclockwise)
+    Convert a quaternion into omega, phi, kappa angles (roll, pitch, yaw)
+    omega is rotation around x in radians (counterclockwise)
+    phi is rotation around y in radians (counterclockwise)
+    kappa is rotation around z in radians (counterclockwise)
     """
     x, y, z, w = q
     t0 = +2.0 * (w * x + y * z)
     t1 = +1.0 - 2.0 * (x * x + y * y)
-    roll_x = math.atan2(t0, t1)
+    omega = math.atan2(t0, t1)
     
     t2 = +2.0 * (w * y - z * x)
     t2 = +1.0 if t2 > +1.0 else t2
     t2 = -1.0 if t2 < -1.0 else t2
-    pitch_y = math.asin(t2)
+    phi = math.asin(t2)
     
     t3 = +2.0 * (w * z + x * y)
     t4 = +1.0 - 2.0 * (y * y + z * z)
-    yaw_z = math.atan2(t3, t4)
+    kappa = math.atan2(t3, t4)
     
-    return roll_x, pitch_y, yaw_z  # in radians
-
-# def quaternion_to_euler(q):
-#     """
-#     Convert a quaternion into euler angles (yaw, pitch, roll)
-#     yaw is rotation around z in radians (counterclockwise)
-#     pitch is rotation around y in radians (counterclockwise)
-#     roll is rotation around x in radians (counterclockwise)
-#     """
-#     x, y, z, w = q
-
-#     t0 = +2.0 * (w * z + x * y)
-#     t1 = +1.0 - 2.0 * (x * x + y * y)
-#     yaw_z = math.atan2(t0, t1)
-
-#     t2 = +2.0 * (w * y - x * z)
-#     t2 = +1.0 if t2 > +1.0 else t2
-#     t2 = -1.0 if t2 < -1.0 else t2
-#     pitch_y = math.asin(t2)
-
-#     t3 = +2.0 * (w * x + y * z)
-#     t4 = +1.0 - 2.0 * (y * y + z * z)
-#     roll_x = math.atan2(t3, t4)
-
-#     return yaw_z, pitch_y, roll_x  # in radians
+    return omega, phi, kappa  # in radians
 
 def generate_corrected_eo(data_dict):
     corrected_eo = {}
     for image, camera in data_dict.items():
         R = camera.rotmat
         # q = rotation_matrix_to_quaternion(R)
-        q = quaternion_from_matrix(R)
-        roll, pitch, yaw = quaternion_to_euler(q)
+        q = quaternion_from_4x4_matrix(R)
+        omega, phi, kappa = quaternion_to_opk(q)
         corrected_eo[image] = {
             'x': camera.tvec[0],
             'y': camera.tvec[1],
             'z': camera.tvec[2],
-            'omega': roll,    
-            'phi': pitch,    
-            'kappa': yaw      
+            'omega': omega,    
+            'phi': phi,    
+            'kappa': kappa      
         }
     return corrected_eo
 
@@ -351,98 +373,121 @@ def display_stats(stats, columns):
         mean_value = round(stats['mean'][col], 4)
         std_value = round(stats['std'][col], 4)
         print(f"{col:<10}: Min: {min_value:>8}, Max: {max_value:>8}, Mean: {mean_value:>8}, Std: {std_value:>8}")
-        
+
+def multiply_xyz_by_100(values):
+    return [value * 100 if i < 3 and not np.isnan(value) else value for i, value in enumerate(values)]
+
+def radians_to_degrees(radians):
+    # 라디안 값을 도로 변환
+    return radians * (180 / np.pi)
+
+def convert_angles(stats):
+    # 각도를 라디안에서 도로 변환
+    for key in stats:
+        if key in ["Min", "Max", "Mean", "Std", "RMSE"]:
+            # Omega, Phi, Kappa 변환 (인덱스 3, 4, 5)
+            stats[key][3:] = [radians_to_degrees(value) if not np.isnan(value) else value for value in stats[key][3:]]
+        elif key == "Total RMSE":
+            # Total RMSE의 경우 Omega, Phi, Kappa만 변환 (인덱스 3, 4, 5)
+            stats[key][3] = radians_to_degrees(stats[key][3]) if not np.isnan(stats[key][3]) else np.nan
+    return stats
+   
 def main(pred_csv_path, gt_csv_path, save_base_path):
-    rotation_thresholds_degrees = np.linspace(0.2, 10, 10)
-    translation_thresholds_meters = np.geomspace(0.05, 1, 10)
+    # rotation_thresholds_degrees = np.linspace(0.2, 10, 10)
+    # translation_thresholds_meters = np.geomspace(0.05, 1, 10)
     
     pred_dict = dict_from_eo_csv(pred_csv_path)
     gt_dict = dict_from_eo_csv(gt_csv_path)
     
-    for image in gt_dict:
-        R_gt, T_gt = gt_dict[image].rotmat, gt_dict[image].tvec
-        if image not in pred_dict:
-            print(f"Warning: No prediction for image {image}. Skipping.")
-            continue
+    # for image in gt_dict:
+    #     R_gt, T_gt = gt_dict[image].rotmat, gt_dict[image].tvec
+    #     if image not in pred_dict:
+    #         print(f"Warning: No prediction for image {image}. Skipping.")
+    #         continue
 
-        R_pred, T_pred = pred_dict[image].rotmat, pred_dict[image].tvec
-        if R_pred is None or T_pred is None:
-            print(f"Warning: No prediction for image {image}. Skipping.")
-            continue
+    #     R_pred, T_pred = pred_dict[image].rotmat, pred_dict[image].tvec
+    #     if R_pred is None or T_pred is None:
+    #         print(f"Warning: No prediction for image {image}. Skipping.")
+    #         continue
 
-        err_q, err_t = evaluate_R_t(R_gt, T_gt, R_pred, T_pred)
+    #     err_q, err_t = evaluate_R_t(R_gt, T_gt, R_pred, T_pred)
 
-        print(f"Image: {image}")
-        print(f"    Rotation Error: {err_q:.2f}°, Translation Error: {err_t:.2f}m")
+    #     print(f"Image: {image}")
+    #     print(f"    Rotation Error: {err_q:.2f}°, Translation Error: {err_t:.2f}m")
 
-        mAA, mAA_q, mAA_t = compute_mAA(err_q=[err_q],
-                                       err_t=[err_t],
-                                       ths_q=rotation_thresholds_degrees,
-                                       ths_t=translation_thresholds_meters)
+    #     mAA, mAA_q, mAA_t = compute_mAA(err_q=[err_q],
+    #                                    err_t=[err_t],
+    #                                    ths_q=rotation_thresholds_degrees,
+    #                                    ths_t=translation_thresholds_meters)
 
-        for i, (th_q, th_t) in enumerate(zip(rotation_thresholds_degrees, translation_thresholds_meters)):
-            print(f"    Rotation Threshold: {th_q:.2f}°, Translation Threshold: {th_t:.2f}m")
-            print(f"        Accuracy: {mAA[i]:.2f}, Rotation Accuracy: {mAA_q[i]:.2f}, Translation Accuracy: {mAA_t[i]:.2f}")
+    #     for i, (th_q, th_t) in enumerate(zip(rotation_thresholds_degrees, translation_thresholds_meters)):
+    #         print(f"    Rotation Threshold: {th_q:.2f}°, Translation Threshold: {th_t:.2f}m")
+    #         print(f"        Accuracy: {mAA[i]:.2f}, Rotation Accuracy: {mAA_q[i]:.2f}, Translation Accuracy: {mAA_t[i]:.2f}")
     
-    print("="*80)
-    mAA = eval_eo_data(
-        pred_csv_path=pred_csv_path,
-        gt_csv_path=gt_csv_path,
-        rotation_thresholds_degrees=rotation_thresholds_degrees,
-        translation_thresholds_meters=translation_thresholds_meters,
-        verbose=True
-    )
-    print("Final mAA:", mAA)
+    # print("="*80)
+    # mAA = eval_eo_data(
+    #     pred_csv_path=pred_csv_path,
+    #     gt_csv_path=gt_csv_path,
+    #     rotation_thresholds_degrees=rotation_thresholds_degrees,
+    #     translation_thresholds_meters=translation_thresholds_meters,
+    #     verbose=True
+    # )
+    # print("Final mAA:", mAA)
 
-    pred_save_path = save_base_path + "/pred_rot_trans_matrices.csv"
-    gt_save_path = save_base_path + "/gt_rot_trans_matrices.csv"
+###################################################################################################################
+    # pred_save_path = save_base_path + "/trans_matrices/pred_rot_trans_matrices.csv"
+    # gt_save_path = save_base_path + "/trans_matrices/gt_rot_trans_matrices.csv"
 
-    save_all_matrices_to_csv(
-        pred_dict,
-        gt_dict,
-        pred_save_path,
-        gt_save_path
-    )
+    # save_all_matrices_to_csv(
+    #     pred_dict,
+    #     gt_dict,
+    #     pred_save_path,
+    #     gt_save_path
+    # )
     
-    gt_corrected_eo = generate_corrected_eo(gt_dict)
-    pred_corrected_eo = generate_corrected_eo(pred_dict)
+    # gt_corrected_eo = generate_corrected_eo(gt_dict)
+    # pred_corrected_eo = generate_corrected_eo(pred_dict)
 
-    gt_eo = save_corrected_eo_to_csv(gt_corrected_eo, "/media/jhun/4TBHDD/downloads/corrected_gt_eo.csv")
-    pred_eo =save_corrected_eo_to_csv(pred_corrected_eo, "/media/jhun/4TBHDD/downloads/corrected_pred_eo.csv")
+    # gt_eo = save_corrected_eo_to_csv(gt_corrected_eo, "/data/EO_opk/corrected/corrected_gt_eo.csv")
+    # pred_eo =save_corrected_eo_to_csv(pred_corrected_eo, "/data/EO_opk/corrected/corrected_pred_eo.csv")
 
+###################rotation matrix visualization###################################################################################################################
     # image_name = "100_0208_0016.jpg"
     # 100_0208_0016.jpg
     # factory134_merge_901.lsp
     # visualize_camera_poses(pred_dict, gt_dict, image_name)
 
     # CSV에서 데이터 읽기
-    gt_dict = create_dicts_from_csv('/media/jhun/4TBHDD/downloads/gt_rot_trans_matrices_v2.csv')
-    pred_dict = create_dicts_from_csv('/media/jhun/4TBHDD/downloads/pred_rot_trans_matrices_v2.csv')
+    # gt_dict = create_dicts_from_csv('/data/EO_opk/trans_matrices/gt_rot_trans_matrices.csv')
+    # pred_dict = create_dicts_from_csv('/data/EO_opk/trans_matrices/pred_rot_trans_matrices.csv')
 
-    # 각 이미지 id에 대해 그림 그리기
-    fig = plt.figure(figsize=(8, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.grid(True)
+    # # 각 이미지 id에 대해 그림 그리기
+    # fig = plt.figure(figsize=(8, 8))
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.set_xlabel('X')
+    # ax.set_ylabel('Y')
+    # ax.set_zlabel('Z')
+    # ax.grid(True)
     
-    for image_name in gt_dict.keys():
-        R_gt, T_gt = gt_dict[image_name]['rotmat'], gt_dict[image_name]['tvec']
-        plot_camera(ax, R_gt, T_gt, color='g', label=f"GT", length=10, image_id=image_name)
+    # for image_name in gt_dict.keys():
+    #     R_gt, T_gt = gt_dict[image_name]['rotmat'], gt_dict[image_name]['tvec']
+    #     plot_camera(ax, R_gt, T_gt, color='g', label=f"GT", length=10, image_id=image_name)
 
-    for image_name in pred_dict.keys():
-        R_pred, T_pred = pred_dict[image_name]['rotmat'], pred_dict[image_name]['tvec']
-        plot_camera(ax, R_pred, T_pred, color='r', label=f"Pred", length=10, image_id=image_name)
+    # for image_name in pred_dict.keys():
+    #     R_pred, T_pred = pred_dict[image_name]['rotmat'], pred_dict[image_name]['tvec']
+    #     plot_camera(ax, R_pred, T_pred, color='r', label=f"Pred", length=10, image_id=image_name)
         
-    ax.set_title("Camera Poses for All Images")
-    plt.show()
+    # ax.set_title("Camera Poses for All Images")
+    # plt.show()
+
+###################################################################################################################################################################
 
     pd.set_option('display.float_format', '{:.4f}'.format)
+    
     # Read GT and prediction CSV files
-    gt = pd.read_csv(gt_eo, comment='#', skiprows=[1], header=None, names=['#name', 'x', 'y', 'z', 'omega', 'phi', 'kappa'])
+    gt = pd.read_csv(gt_csv, comment='#', skiprows=[1], header=None, names=['#name', 'x', 'y', 'z', 'omega', 'phi', 'kappa'])
     # print(gt)
-    pred = pd.read_csv(pred_eo, comment='#', skiprows=[1], header=None, names=['#name', 'x', 'y', 'z', 'omega', 'phi', 'kappa'])
+    pred = pd.read_csv(pred_csv, comment='#', skiprows=[1], header=None, names=['#name', 'x', 'y', 'z', 'omega', 'phi', 'kappa'])
     # print(pred)
 
     # Sort the dataframes by the image ID
@@ -484,41 +529,61 @@ def main(pred_csv_path, gt_csv_path, save_base_path):
         np.sqrt(mean_squared_error(gt['kappa'], pred['kappa']))
     ]
 
-    # SQRT(SUMSQ) calculations
+    # Total RMSE calculations
     sqrt_sumsq_xyz = np.sqrt(sum([rmse_values[i]**2 for i in range(3)]))
     sqrt_sumsq_omega_phi_kappa = np.sqrt(sum([rmse_values[i]**2 for i in range(3, 6)]))
-
+    
     # Metrics dictionary
     stats = {
         "Min": errors.min(),
         "Max": errors.max(),
         "Mean": errors.mean(),
-        "Std": errors.std(),
+        "Std": errors.std(),  # 'Std.'가 아니라 'Std'를 사용합니다.
         "RMSE": rmse_values,
-        "SQRT(SUMSQ)": [sqrt_sumsq_xyz, np.nan, np.nan, sqrt_sumsq_omega_phi_kappa, np.nan, np.nan]
+        "Total RMSE": [sqrt_sumsq_xyz, np.nan, np.nan, sqrt_sumsq_omega_phi_kappa, np.nan, np.nan]
     }
-
-    # ASCII table formatting
-    separator = "+-------+" + "+---------------------" * 6 + "+"
-    print(separator)
-    print("|       |", " | ".join([f"{x}_error".ljust(20) for x in ["x", "y", "z", "omega", "phi", "kappa"]]), "|")
-    print(separator)
-
-    for metric in ["Min", "Max", "Mean", "Std", "RMSE", "SQRT(SUMSQ)"]:
-        if metric != "SQRT(SUMSQ)":
-            print("|", metric.ljust(5), "|", " | ".join([f"{stats[metric][i]:<20.10f}" if not np.isnan(stats[metric][i]) else ' '.ljust(20) for i in range(6)]), "|")
-            print(separator)
-        else:
-            # 여기서 "SQRT(SUMSQ)" 행을 원하는 방식으로 표현하세요.
-            custom_representation = "| -----------------------SQRT(SUMSQ)_x, y, z |"
-            custom_representation += f" {stats['SQRT(SUMSQ)'][0]:<20.10f} | -----------------------SQRT(SUMSQ)_omega, phi, kappa | {stats['SQRT(SUMSQ)'][3]:<20.10f} |"
-            print(custom_representation)
-            print(separator)
-
     
-base_path = "/media/jhun/4TBHDD/downloads"
-# pred_csv = base_path + "/test_autodrone202_automarker_laser_H_P_R.csv"
-# gt_csv = base_path + "/test_autodrone202_M_marker_laser_H_P_R.csv"
-pred_csv = base_path + "/230821_auto18_drone_laser_opk.csv"
-gt_csv = base_path + "/230821_autodrone202_Mmarker_laser.csv"
+    # stats = convert_angles(stats)
+    
+    for key in ["Min", "Max", "Mean", "Std", "RMSE", "Total RMSE"]:
+        stats[key] = multiply_xyz_by_100(stats[key])
+    
+    # stats = convert_angles(stats)
+    
+    group_header1 = "+------------+-----------------------------------------------+--------------------------------------------------+"
+    group_header = "|            |                 Positions(cm)                 |                     Orientation                  |"
+    
+    # prettytable 객체 생성
+    table = PrettyTable()
+
+    # 열 제목 설정
+    table.field_names = ["", "X", "Y", "Z", "Omega", "Phi", "Kappa"]
+
+    # 각 메트릭에 대한 행 추가
+    for metric in ["Min", "Max", "Mean", "Std", "RMSE"]:
+        row = [metric] + [f"{value:.10f}" if not np.isnan(value) else "-" for value in stats[metric]]
+        table.add_row(row)
+        # table.add_row(['-' * len(metric)] + ['-' * len(f"{value:.10f}") for value in stats[metric]])  # 구분선 추가
+
+    # Total RMSE 특별 처리
+    total_rmse = ["Total RMSE"] + [f"{value:.10f}" if not np.isnan(value) else "-" for value in stats["Total RMSE"]]
+    table.add_row(total_rmse)
+    print(group_header1)
+    print(group_header)
+    print(table)
+    
+    RMSE_filename = f"{save_base_path}/output/RMSE_results_gt.csv"
+    
+    with open(RMSE_filename, 'w', newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        csv_writer.writerow(table.field_names)
+
+        for row in table._rows:
+            csv_writer.writerow(row)
+
+    print(f"Complete!!!")
+    
+base_path = "/data/EO_opk"
+pred_csv = base_path + "/240105_rtk_eo/240105_loftr_n3.csv"
+gt_csv = base_path + "/240105_rtk_eo/factory_134_gt_eo.csv"
 main(pred_csv, gt_csv, base_path)

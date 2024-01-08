@@ -5,6 +5,8 @@ import glob
 import pandas as pd
 from collections import Counter
 
+tr = 19
+
 def convert_MS_Marker_format(keypoint_h5_dir, marker_h5_dir, image_dir, output_csv, limit_pair_markerlist):
     class UnionFind:
         def __init__(self):
@@ -94,23 +96,43 @@ def convert_MS_Marker_format(keypoint_h5_dir, marker_h5_dir, image_dir, output_c
     marker_count = 0
     total_components = len(components)
 
+    # data = []
+    # # Inside the loop where you create the data list:
+    # for i, component in enumerate(components):
+    #     component_img_ids = set(img_id for img_id, _ in component)
+    #     if len(component_img_ids) >= limit_pair_markerlist:
+    #         for node in component:
+    #             img_id, tiepoint_index = node
+    #             marker_label = f"point {marker_count}" 
+    #             x, y = tuple(keypoints[img_id][tiepoint_index])
+    #             img_path = img_dict.get(img_id, "Path not found")  # Getting the image path from the dictionary
+    #             # img_id_no_ext = img_id.rstrip(".jpg")  # Remove the '.jpg' extension from img_id
+    #             # data.append({"img_id": img_id_no_ext, "marker": marker_label, "x": x, "y": y})
+    #             data.append({"img_id": f"{img_id}", "marker": marker_label, "x": x, "y": y})
+    #             # data.append({"img_id": img_path, "marker": marker_label, "x": x, "y": y})
+    #         marker_count += 1
+    #         print(f"Processing component {i+1} of {total_components}")
+    #         print(f"Created marker {marker_label} for component {i+1} of {total_components} with {len(component_img_ids)} images and {len(component)} nodes")
+    
     data = []
-    # Inside the loop where you create the data list:
     for i, component in enumerate(components):
         component_img_ids = set(img_id for img_id, _ in component)
         if len(component_img_ids) >= limit_pair_markerlist:
             for node in component:
                 img_id, tiepoint_index = node
-                marker_label = f"point {marker_count}" 
+                marker_label = f"point {marker_count}"
                 x, y = tuple(keypoints[img_id][tiepoint_index])
-                img_path = img_dict.get(img_id, "Path not found")  # Getting the image path from the dictionary
-                # img_id_no_ext = img_id.rstrip(".jpg")  # Remove the '.jpg' extension from img_id
-                # data.append({"img_id": img_id_no_ext, "marker": marker_label, "x": x, "y": y})
-                data.append({"img_id": f"{img_id}", "marker": marker_label, "x": x, "y": y})
-                # data.append({"img_id": img_path, "marker": marker_label, "x": x, "y": y})
-            marker_count += 1
+                img_id_no_ext = img_id.rstrip(".jpg")
+                data.append({"img_id": img_id_no_ext, "marker": marker_label, "x": x, "y": y})
+            
+            if marker_count < tr:
+                marker_count += 1
+
             print(f"Processing component {i+1} of {total_components}")
             print(f"Created marker {marker_label} for component {i+1} of {total_components} with {len(component_img_ids)} images and {len(component)} nodes")
+
+    df = pd.DataFrame(data)
+    df.to_csv(output_csv, index=False)
 
     df = pd.DataFrame(data)
     df.to_csv(output_csv, index=False)
@@ -119,9 +141,9 @@ def convert_MS_Marker_format(keypoint_h5_dir, marker_h5_dir, image_dir, output_c
     print("Execution time: ", end_time - start_time)
     
 if __name__ == "__main__":
-    keypoint_h5_dir = '/data/featureout/factory134/1920_KeyNetAffNetHardNet/1920_KeyNetAffNetHardNet_keypoints.h5'
-    marker_h5_dir = '/data/featureout/factory134/1920_KeyNetAffNetHardNet/1920_KeyNetAffNetHardNet_markers.h5'
-    image_dir = '/data/refined_datasets/1920_KeyNetAffNetHardNet/images'
-    output_csv = '/data/factory134_markers_metashape.csv'
-    limit_pair_markerlist = 3
-    convert_RC_CP_format(keypoint_h5_dir, marker_h5_dir, image_dir, output_csv, limit_pair_markerlist)
+    keypoint_h5_dir = '/data/featureout/auto_markers/1280_DISK/1280_DISK_keypoints.h5'
+    marker_h5_dir = '/data/featureout/auto_markers/1280_DISK/1280_DISK_markers_n2.h5'
+    image_dir = '/data/refined_images'
+    output_csv = '/data/rc_format_markers/factory134_1280_DISK_markers_n2.csv'
+    limit_pair_markerlist = 0
+    convert_MS_Marker_format(keypoint_h5_dir, marker_h5_dir, image_dir, output_csv, limit_pair_markerlist)
