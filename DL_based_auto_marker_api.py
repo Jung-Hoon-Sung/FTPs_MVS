@@ -1010,350 +1010,7 @@ def main_function(src, featureout, features_resolutions, checkpoint_path, orinet
         df_csv = pd.DataFrame(csv_data)
         df_csv.to_csv(output_csv, index=False)
     
-#     # Get data from csv.
-#     data_dict = {}
-#     # Replace this with your image directory
-#     img_dir = f'{src}'
-#     # List of valid image file extensions
-#     img_exts = ['.JPG', '.jpg', '.jpeg', '.png', '.bmp', '.tiff']
-#     # Get all files in the directory with valid image extensions
-#     img_files = [f for f in os.listdir(img_dir) if os.path.isfile(os.path.join(img_dir, f)) and os.path.splitext(f)[1].lower() in img_exts]
-#     data_dict[dataset] = {}
-#     data_dict[dataset][scene] = img_files
-
-#     total_max_resolution_time = 0
-#     total_shortlisting_time = 0
-#     total_feature_detection_time = 0
-#     total_feature_matching_time = 0
-#     total_bundle_adjustment_time = 0
-
-#     for dataset in data_dict:
-#         for scene in data_dict[dataset]:
-#             print(f'{dataset} / {scene} -> {len(data_dict[dataset][scene])} images')
-#     out_results = {}
-#     timings = {"shortlisting":[],
-#             "feature_detection": [],
-#             "feature_matching":[],
-#             "RANSAC": [],
-#             "Reconstruction": []}
-#     gc.collect()
-#     datasets = []
-#     for dataset in data_dict:
-#         datasets.append(dataset)
-#     start_time = time()
-#     for dataset in datasets:
-#         print(dataset)
-#         if dataset not in out_results:
-#             out_results[dataset] = {}
-#         for scene in data_dict[dataset]:
-#             print(scene)
-#             img_dir = f'{src}'
-#             if not os.path.exists(img_dir):
-#                 continue
-#             try:
-#                 out_results[dataset][scene] = {}
-#                 img_fnames = [f'{src}/{x}' for x in data_dict[dataset][scene]]
-#                 print (f"Got {len(img_fnames)} images")
-#                 # feature_dir = f'{featureout}/{dataset}_{scene}'
-#                 feature_dir = f'{featureout}/{dataset}/{scene}'
-#                 # generated_files.append(feature_dir)
-#                 if not os.path.isdir(feature_dir):
-#                     os.makedirs(feature_dir, exist_ok=True)
-#                 t=time()
-                
-#                 #Calculate the maximum resolution
-#                 max_resolution_start_time = time()
-#                 max_length = get_max_resolution(img_fnames)
-#                 print(f"Max image length: {max_length}")
-#                 max_resolution_end_time = time()
-#                 max_resolution_time = max_resolution_end_time - max_resolution_start_time
-#                 total_max_resolution_time += max_resolution_time
-                
-#                 shortlisting_start_time = time()
-                
-#                 index_pairs = get_image_pairs_shortlist(img_fnames,
-#                                     sim_th = sim_th, # should be strict
-#                                     min_pairs = min_pairs, # we select at least min_pairs PER IMAGE with biggest similarity
-#                                     exhaustive_if_less = exhaustive_if_less,
-#                                     device=device)
-#                 # Print the index pairs and the corresponding image file names
-#                 for pair in index_pairs:
-#                     img1 = img_fnames[pair[0]]
-#                     img2 = img_fnames[pair[1]]
-#                     print(f"Index pair: {pair}, Image pair: ({img1}, {img2})")
-#                 t=time() -t 
-#                 timings['shortlisting'].append(t)
-                
-#                 shortlisting_end_time = time()
-#                 shortlisting_time = shortlisting_end_time - shortlisting_start_time
-#                 total_shortlisting_time += shortlisting_time
-#                 print(f"{len(index_pairs)}, pairs to match, {shortlisting_time:.4f} sec")
-
-#                 print (f'{len(index_pairs)}, pairs to match, {t:.4f} sec')
-#                 gc.collect()
-#                 feature_detection_start_time = time()
-#                 t=time()            
-#                 for local_feature in features_resolutions:
-#                     for resolution in features_resolutions[local_feature]:
-#                         print(f"Got {local_feature} & {resolution}")                       
-#                         if local_feature == 'KeyNetAffNetHardNet' or local_feature == 'KeyNetAffNetSoSNet' or local_feature == 'DISK' or local_feature == 'SIFT':
-#                             keypoints_name = detect_features(img_fnames,
-#                                 num_feats = num_feats,
-#                                 upright = False,
-#                                 device=device,
-#                                 feature_dir=feature_dir,    def create_csv_from_filtered_data(filtered_data, reconstruction, output_csv):
-#                             print(f'Features detected in  {t:.4f} sec')
-                            
-#                             feature_matching_start_time = time()
-#                             t=time()
-#                             matches_name = match_features(img_fnames, index_pairs, feature_dir=feature_dir, device=device,
-#                                                         min_matches=min_matches, matching_alg=matching_alg,
-#                                                         local_feature=local_feature, resolution=resolution)                
-#                         elif local_feature == 'LoFTR':
-#                             feature_matching_start_time = time()
-#                             keypoints_name, matches_name = match_features2(img_fnames, index_pairs,
-#                                                                         feature_dir=feature_dir, device=device,
-#                                                                         local_feature=local_feature,
-#                                                                         min_matches=min_matches,
-#                                                                         resolution=resolution)       
-#                         else:
-#                             print('Redefine the model!!!')
-#                 ENSEMBLE = any(len(resolutions) > 1 for resolutions in features_resolutions.values()) or len(features_resolutions) > 1           
-#                 if ENSEMBLE == True:
-#                     keypoints, matches = [], []
-#                     for (root, dirs, files) in os.walk(feature_dir):
-#                         print("# root : " + root)
-#                         if len(dirs) > 0:
-#                             for dir_name in dirs:
-#                                 print("dir: " + dir_name)
-#                         if len(files) > 0:
-#                             for file_name in files:
-#                                 file = os.path.splitext(file_name)[0]
-#                                 extension = os.path.splitext(file_name)[1]
-#                                 print("file: " + file_name)                 
-#                                 if extension == ".h5":
-#                                     types = file.split("_")[-1]
-#                                     if types == "keypoints":
-#                                         keypoints.append(file_name)
-#                                     elif types == "matches":
-#                                         matches.append(file_name)
-#                                     else:
-#                                         print("byebye")
-#                                 else:
-#                                     print("Bye")                    
-#                     keypoints_name = 'ensemble_keypoints.h5'
-#                     matches_name = 'ensemble_matches.h5'
-#                     ensemble_keypoint_matches(keypoints, matches, ensemble_keypoints=keypoints_name, ensemble_matches=matches_name, 
-#                                     ensemble_output_dir=feature_dir)   
-#                 t=time() -t 
-#                 timings['feature_matching'].append(t)
-#                 feature_matching_end_time = time()
-#                 feature_matching_time = feature_matching_end_time - feature_matching_start_time
-#                 total_feature_matching_time += feature_matching_time
-#                 print(f"Features matched in {feature_matching_time:.4f} sec")
-                
-#                 print(f'Features matched in  {t:.4f} sec')
-                           
-#                 database_path = f'{feature_dir}/colmap.db'
-#                 if os.path.isfile(database_path):
-#                     os.remove(database_path)
-                    
-#                 bundle_adjustment_start_time = time()
-#                 gc.collect()
-#                 import_into_colmap(img_dir, 
-#                                 feature_dir=feature_dir,
-#                                 database_path=database_path, 
-#                                 keypoints_name=keypoints_name, 
-#                                 matches_name=matches_name)
-#                 output_path = f'{feature_dir}/colmap_rec'
-#                 t=time()
-#                 pycolmap.match_exhaustive(database_path)
-#                 t=time() - t 
-#                 timings['RANSAC'].append(t)
-#                 print(f'RANSAC in  {t:.4f} sec')
-#                 t=time()  
-                
-#                 # By default colmap does not generate a reconstruction if less than 10 images are registered. Lower it to 3.
-#                 mapper_options = pycolmap.IncrementalMapperOptions()
-#                 mapper_options.num_threads = num_threads                             
-#                 mapper_options.max_num_models = max_num_models                        
-#                 mapper_options.ba_local_num_images = ba_local_num_images              
-#                 mapper_options.init_num_trials = init_num_trials                     
-#                 mapper_options.min_num_matches = min_num_matches                     
-#                 mapper_options.min_model_size = min_model_size                  
-#                 mapper_options.ba_global_images_freq = ba_global_images_freq           
-#                 mapper_options.ba_global_points_freq = ba_global_points_freq           
-#                 mapper_options.ba_global_images_ratio = ba_global_images_ratio 
-#                 mapper_options.ba_global_points_ratio = ba_global_points_ratio 
-#                 os.makedirs(output_path, exist_ok=True)
-#                 maps = pycolmap.incremental_mapping(database_path=database_path, image_path=img_dir, output_path=output_path, options=mapper_options)
-#                 print(maps)
-                
-#                 # # Update output_path to the correct directory
-#                 output_path = f'{feature_dir}/colmap_rec/0'
-                
-#                 # # Increase column width to avoid cutting off the logs
-#                 # pd.set_option('display.max_colwidth', None)
-                
-#                 # Initialize the Reconstruction object
-#                 reconstruction = pycolmap.Reconstruction()
-#                 reconstruction.read(output_path)
-                
-#                 # Initialize error container and a dictionary for images corresponding to each Point3DId
-#                 point_errors = defaultdict(list)
-#                 point_images = defaultdict(set)  # we use a set to avoid duplicate image names
-                
-#                 for image_id, image in reconstruction.images.items():
-#                     camera = reconstruction.cameras[image.camera_id]
-#                     params = camera.params
-#                     K = np.array([[params[0], 0, params[2]], [0, params[0], params[3]], [0, 0, 1]])
-                    
-#                     # Convert quaternion to rotation matrix
-#                     r = R.from_quat([image.qvec[1], image.qvec[2], image.qvec[3], image.qvec[0]])
-#                     rotation_matrix = r.as_matrix()
-#                     for point2D_id, point2D in enumerate(image.points2D):
-#                         if point2D.point3D_id != -1 and point2D.point3D_id in reconstruction.points3D:
-#                             point3D = reconstruction.points3D[point2D.point3D_id]         
-                             
-#                             # Transform 3D point from world coordinates to camera coordinates
-#                             point3D_cam = np.dot(np.linalg.inv(rotation_matrix), point3D.xyz - image.tvec) 
-                                   
-#                             # Check if the point is in front of the camera
-#                             if point3D_cam[2] <= 0:
-#                                 continue        
-                            
-#                             # Project the 3D point onto the image plane
-#                             point2D_proj = np.dot(K, point3D_cam)
-#                             point2D_proj = point2D_proj / point2D_proj[2]      
-                                     
-#                             # Compute the error
-#                             error = np.linalg.norm(point2D_proj[0:2] - point2D.xy)        
-                            
-#                             # Save the error for each 3D point and the corresponding image name
-#                             point_errors[point2D.point3D_id].append(error)
-#                             point_images[point2D.point3D_id].add(image.name)  # add the image name to the set of images for this Point3DId
-                            
-#                 # Compute the mean error for each 3D point
-#                 mean_errors = {point_id: np.mean(errs) for point_id, errs in point_errors.items()}
-                
-#                 # Create DataFrame for the errors, the corresponding images, and the number of images
-#                 df_errors = pd.DataFrame(list(zip(mean_errors.keys(), mean_errors.values(), 
-#                                                 [list(point_images[key]) for key in mean_errors.keys()],
-#                                                 [len(point_images[key]) for key in mean_errors.keys()])),
-#                                         columns=['Point3DId', 'MeanError', 'Images', 'ImageCount'])
-                
-#                 # Apply filters on the DataFrame
-#                 if ls_img_name and da_img_name:
-#                     # Apply filters on the DataFrame if ls_img_name and da_img_name are present
-#                     df_errors_filtered = df_errors[df_errors['Images'].apply(
-#                         lambda images: sum(ls_img_name in image for image in images) >= 1 and sum(da_img_name in image for image in images) >= 1)
-#                     ]
-#                 else:
-#                     # Skip filtering if ls_img_name and da_img_name are missing, and use the original DataFrame
-#                     df_errors_filtered = df_errors.copy()
-                    
-#                 df_errors_filtered_sorted = df_errors_filtered.sort_values(by='MeanError')
-                
-#                 # Filter only those with ImageCount >= 4
-#                 df_errors_filtered_sorted_count = df_errors_filtered_sorted[df_errors_filtered_sorted['ImageCount'] >= 3]
-                
-#                 # Take the top N
-#                 df_errors_filtered_sorted_top_N = df_errors_filtered_sorted_count.head(int(sorted_count))
-#                 print(df_errors_filtered_sorted_top_N)
-                
-#                 if ENSEMBLE != True:
-#                     keypoint_h5_dir = f'{feature_dir}/{value[0]}_{key}_keypoints.h5'
-#                     matches_h5_dir = f'{feature_dir}/{value[0]}_{key}_matches.h5'
-#                 else:
-#                     keypoint_h5_dir = f'{feature_dir}/ensemble_keypoints.h5'
-#                     matches_h5_dir = f'{feature_dir}/ensemble_matches.h5'
-                    
-#                 generated_files.append(keypoint_h5_dir)
-#                 # generated_files.append(matches_h5_dir) 
-                   
-#                 # Load existing keypoints and matches
-#                 with h5py.File(keypoint_h5_dir, 'r') as f:
-#                     keypoints = {k: v[:] for k, v in f.items()}
-#                 print("Loaded keypoints: ", len(keypoints))
-#                 with h5py.File(matches_h5_dir, 'r') as f:
-#                     matches = {k: {kk: vv[:] for kk, vv in v.items()} for k, v in f.items()}
-#                 print("Loaded matches: ", len(matches))
-                
-#                 # Initialize a new dictionary to store the matches with low errors
-#                 matches_filtered = {}
-#                 # Get the 2D indices of the selected 3D points in each image
-#                 selected_indices = defaultdict(list)
-#                 for point_id in df_errors_filtered_sorted_top_N['Point3DId']:
-#                     for image_id, image in reconstruction.images.items():
-#                         for i, point2D in enumerate(image.points2D):
-#                             if point2D.point3D_id == point_id:
-#                                 selected_indices[image.name].append(i)
-#                 # Iterate through the top 10 markers
-#                 for _, marker in tqdm(df_errors_filtered_sorted_top_N.iterrows(), total=df_errors_filtered_sorted_top_N.shape[0]):
-#                     # Get the images for the current marker
-#                     images = marker['Images']
-#                     # Iterate through the images for the current marker
-#                     for img1 in images:
-#                         # If the current image has matches
-#                         if img1 in matches:
-#                             # Initialize a new dictionary to store the matches for the current image
-#                             matches_filtered[img1] = {}
-#                             # Iterate through the matches for the current image
-#                             for img2, match in matches[img1].items():
-#                                 # If the other image is also in the images for the current marker
-#                                 if img2 in images:
-#                                     # Filter the match to only include the selected 2D points
-#                                     matches_filtered[img1][img2] = match[np.isin(match[:, 0], selected_indices[img1]) & 
-#                                                                         np.isin(match[:, 1], selected_indices[img2])]
-#                 # Save the matches_filtered dictionary to a new .h5 file
-#                 with h5py.File(f'{feature_dir}/{value[0]}_{key}_markers.h5', 'w') as f:
-#                     generated_files.append(f'{feature_dir}/{value[0]}_{key}_markers.h5')
-#                     for img1, img1_matches in matches_filtered.items():
-#                         group = f.create_group(img1)
-#                         for img2, match in img1_matches.items():
-#                             group.create_dataset(img2, data=match)
-#                 bundle_adjustment_end_time = time()
-#                 bundle_adjustment_time = bundle_adjustment_end_time - bundle_adjustment_start_time
-#                 total_bundle_adjustment_time += bundle_adjustment_time
-#                 print("Saved filtered matches: ", len(matches_filtered))
-#                 gc.collect()
-                
-#                 print("\n--- Total Time Summary ---")
-#                 print(f"Total Max Resolution Calculation Time: {total_max_resolution_time:.4f} seconds")
-#                 print(f"Total Shortlisting Time: {total_shortlisting_time:.4f} seconds")
-#                 print(f"Total Feature Detection Time: {total_feature_detection_time:.4f} seconds")
-#                 print(f"Total Feature Matching Time: {total_feature_matching_time:.4f} seconds")
-#                 print(f"Total Bundle Adjustment Time: {total_bundle_adjustment_time:.4f} seconds")
-#                 total_time = (total_max_resolution_time + total_shortlisting_time +
-#                             total_feature_detection_time + total_feature_matching_time +
-#                             total_bundle_adjustment_time)
-#                 print(f"Total Processing Time: {total_time:.4f} seconds")
-   
-#             except Exception as e:
-#                 print(f"An error occurred during the second loop: {e}")
-#                 traceback.print_exc()
-#     return generated_files               
-                
-# if __name__ == "__main__":
-#     src = '/data/refined_images'
-#     featureout = '/data/featureout'
-#     features_resolutions = {
-#     'LoFTR': [1280]
-#     }
-#     checkpoint_path='/data/weights/convnext_large_mlp.clip_laion2b_soup_ft_in12k_in1k_384.pth'
-#     orinet_path = '/data/weights/OriNet.pth'
-#     keynet_path = '/data/weights/keynet_pytorch.pth'
-#     affnet_path = '/data/weights/AffNet.pth'
-#     hardnet_path = '/data/weights/HardNet.pth'
-#     sosnet_path = '/data/weights/sosnet_32x32_liberty.pth'
-#     disk_path = '/data/weights/epipolar-save.pth'
-#     loftr_path = '/data/weights/outdoor_ds.ckpt'
-       
-#     num_feats = 40000
-#     os.makedirs(featureout, exist_ok=True)
-#     main_function(src, featureout, features_resolutions, checkpoint_path, orinet_path, keynet_path, affnet_path, hardnet_path,
-#                   sosnet_path, disk_path, loftr_path, num_feats = 8000)
-    
+    # Get data from csv.
     data_dict = {}
     # Replace this with your image directory
     img_dir = f'{src}'
@@ -1363,6 +1020,13 @@ def main_function(src, featureout, features_resolutions, checkpoint_path, orinet
     img_files = [f for f in os.listdir(img_dir) if os.path.isfile(os.path.join(img_dir, f)) and os.path.splitext(f)[1].lower() in img_exts]
     data_dict[dataset] = {}
     data_dict[dataset][scene] = img_files
+
+    total_max_resolution_time = 0
+    total_shortlisting_time = 0
+    total_feature_detection_time = 0
+    total_feature_matching_time = 0
+    total_bundle_adjustment_time = 0
+
     for dataset in data_dict:
         for scene in data_dict[dataset]:
             print(f'{dataset} / {scene} -> {len(data_dict[dataset][scene])} images')
@@ -1390,10 +1054,145 @@ def main_function(src, featureout, features_resolutions, checkpoint_path, orinet
                 out_results[dataset][scene] = {}
                 img_fnames = [f'{src}/{x}' for x in data_dict[dataset][scene]]
                 print (f"Got {len(img_fnames)} images")
+                # feature_dir = f'{featureout}/{dataset}_{scene}'
+                feature_dir = f'{featureout}/{dataset}/{scene}'
+                # generated_files.append(feature_dir)
+                if not os.path.isdir(feature_dir):
+                    os.makedirs(feature_dir, exist_ok=True)
+                t=time()
+                
+                #Calculate the maximum resolution
+                max_resolution_start_time = time()
+                max_length = get_max_resolution(img_fnames)
+                print(f"Max image length: {max_length}")
+                max_resolution_end_time = time()
+                max_resolution_time = max_resolution_end_time - max_resolution_start_time
+                total_max_resolution_time += max_resolution_time
+                
+                shortlisting_start_time = time()
+                
+                index_pairs = get_image_pairs_shortlist(img_fnames,
+                                    sim_th = sim_th, # should be strict
+                                    min_pairs = min_pairs, # we select at least min_pairs PER IMAGE with biggest similarity
+                                    exhaustive_if_less = exhaustive_if_less,
+                                    device=device)
+                # Print the index pairs and the corresponding image file names
+                for pair in index_pairs:
+                    img1 = img_fnames[pair[0]]
+                    img2 = img_fnames[pair[1]]
+                    print(f"Index pair: {pair}, Image pair: ({img1}, {img2})")
+                t=time() -t 
+                timings['shortlisting'].append(t)
+                
+                shortlisting_end_time = time()
+                shortlisting_time = shortlisting_end_time - shortlisting_start_time
+                total_shortlisting_time += shortlisting_time
+                print(f"{len(index_pairs)}, pairs to match, {shortlisting_time:.4f} sec")
 
-                """only extracted markers.h5"""
-                feature_dir = "/data/featureout/auto_markers/1280_LoFTR"
-                # output_path = f'{feature_dir}/models/0'
+                print (f'{len(index_pairs)}, pairs to match, {t:.4f} sec')
+                gc.collect()
+                feature_detection_start_time = time()
+                t=time()            
+                for local_feature in features_resolutions:
+                    for resolution in features_resolutions[local_feature]:
+                        print(f"Got {local_feature} & {resolution}")                       
+                        if local_feature == 'KeyNetAffNetHardNet' or local_feature == 'KeyNetAffNetSoSNet' or local_feature == 'DISK':
+                            keypoints_name = detect_features(img_fnames,
+                                num_feats = num_feats,
+                                upright = False,
+                                device=device,
+                                feature_dir=feature_dir,
+                                local_feature=local_feature,
+                                resolution=resolution 
+                                )                       
+                            gc.collect()
+                            t=time() -t 
+                            timings['feature_detection'].append(t)
+                            print(f'Features detected in  {t:.4f} sec')
+                            t=time()
+                            matches_name = match_features(img_fnames, index_pairs, feature_dir=feature_dir, device=device,
+                                                        min_matches=min_matches, matching_alg=matching_alg,
+                                                        local_feature=local_feature, resolution=resolution)               
+                        elif local_feature == 'LoFTR':
+                            feature_matching_start_time = time()
+                            keypoints_name, matches_name = match_features2(img_fnames, index_pairs,
+                                                                        feature_dir=feature_dir, device=device,
+                                                                        local_feature=local_feature,
+                                                                        min_matches=min_matches,
+                                                                        resolution=resolution)       
+                        else:
+                            print('Redefine the model!!!')
+                ENSEMBLE = any(len(resolutions) > 1 for resolutions in features_resolutions.values()) or len(features_resolutions) > 1           
+                if ENSEMBLE == True:
+                    keypoints, matches = [], []
+                    for (root, dirs, files) in os.walk(feature_dir):
+                        print("# root : " + root)
+                        if len(dirs) > 0:
+                            for dir_name in dirs:
+                                print("dir: " + dir_name)
+                        if len(files) > 0:
+                            for file_name in files:
+                                file = os.path.splitext(file_name)[0]
+                                extension = os.path.splitext(file_name)[1]
+                                print("file: " + file_name)                 
+                                if extension == ".h5":
+                                    types = file.split("_")[-1]
+                                    if types == "keypoints":
+                                        keypoints.append(file_name)
+                                    elif types == "matches":
+                                        matches.append(file_name)
+                                    else:
+                                        print("byebye")
+                                else:
+                                    print("Bye")                    
+                    keypoints_name = 'ensemble_keypoints.h5'
+                    matches_name = 'ensemble_matches.h5'
+                    ensemble_keypoint_matches(keypoints, matches, ensemble_keypoints=keypoints_name, ensemble_matches=matches_name, 
+                                    ensemble_output_dir=feature_dir)   
+                t=time() -t 
+                timings['feature_matching'].append(t)
+                feature_matching_end_time = time()
+                feature_matching_time = feature_matching_end_time - feature_matching_start_time
+                total_feature_matching_time += feature_matching_time
+                print(f"Features matched in {feature_matching_time:.4f} sec")
+                
+                print(f'Features matched in  {t:.4f} sec')
+                           
+                database_path = f'{feature_dir}/colmap.db'
+                if os.path.isfile(database_path):
+                    os.remove(database_path)
+                    
+                bundle_adjustment_start_time = time()
+                gc.collect()
+                import_into_colmap(img_dir, 
+                                feature_dir=feature_dir,
+                                database_path=database_path, 
+                                keypoints_name=keypoints_name, 
+                                matches_name=matches_name)
+                output_path = f'{feature_dir}/colmap_rec'
+                t=time()
+                pycolmap.match_exhaustive(database_path)
+                t=time() - t 
+                timings['RANSAC'].append(t)
+                print(f'RANSAC in  {t:.4f} sec')
+                t=time()  
+                
+                # By default colmap does not generate a reconstruction if less than 10 images are registered. Lower it to 3.
+                mapper_options = pycolmap.IncrementalMapperOptions()
+                mapper_options.num_threads = num_threads                             
+                mapper_options.max_num_models = max_num_models                        
+                mapper_options.ba_local_num_images = ba_local_num_images              
+                mapper_options.init_num_trials = init_num_trials                     
+                mapper_options.min_num_matches = min_num_matches                     
+                mapper_options.min_model_size = min_model_size                  
+                mapper_options.ba_global_images_freq = ba_global_images_freq           
+                mapper_options.ba_global_points_freq = ba_global_points_freq           
+                mapper_options.ba_global_images_ratio = ba_global_images_ratio 
+                mapper_options.ba_global_points_ratio = ba_global_points_ratio 
+                os.makedirs(output_path, exist_ok=True)
+                maps = pycolmap.incremental_mapping(database_path=database_path, image_path=img_dir, output_path=output_path, options=mapper_options)
+                print(maps)
+                
                 # # Update output_path to the correct directory
                 output_path = f'{feature_dir}/colmap_rec/0'
                 
@@ -1407,26 +1206,21 @@ def main_function(src, featureout, features_resolutions, checkpoint_path, orinet
                 # Initialize error container and a dictionary for images corresponding to each Point3DId
                 point_errors = defaultdict(list)
                 point_images = defaultdict(set)  # we use a set to avoid duplicate image names
-                # point_image_errors = defaultdict(dict)
                 
                 for image_id, image in reconstruction.images.items():
                     camera = reconstruction.cameras[image.camera_id]
                     params = camera.params
-                    # K = np.array([[params[0], 0, params[2]], [0, params[0], params[3]], [0, 0, 1]])
-                    K = np.array([[params[0], 0, params[1]], [0, params[0], params[2]], [0, 0, 1]])
+                    K = np.array([[params[0], 0, params[2]], [0, params[0], params[3]], [0, 0, 1]])
                     
                     # Convert quaternion to rotation matrix
                     r = R.from_quat([image.qvec[1], image.qvec[2], image.qvec[3], image.qvec[0]])
-                    # r = R.from_quat([image.qvec[0], image.qvec[1], image.qvec[2], image.qvec[3]])
                     rotation_matrix = r.as_matrix()
-                    
                     for point2D_id, point2D in enumerate(image.points2D):
                         if point2D.point3D_id != -1 and point2D.point3D_id in reconstruction.points3D:
                             point3D = reconstruction.points3D[point2D.point3D_id]         
                              
                             # Transform 3D point from world coordinates to camera coordinates
-                            # point3D_cam = np.dot(np.linalg.inv(rotation_matrix), point3D.xyz - image.tvec) 
-                            point3D_cam = np.dot(rotation_matrix, point3D.xyz) + image.tvec
+                            point3D_cam = np.dot(np.linalg.inv(rotation_matrix), point3D.xyz - image.tvec) 
                                    
                             # Check if the point is in front of the camera
                             if point3D_cam[2] <= 0:
@@ -1436,13 +1230,12 @@ def main_function(src, featureout, features_resolutions, checkpoint_path, orinet
                             point2D_proj = np.dot(K, point3D_cam)
                             point2D_proj = point2D_proj / point2D_proj[2]      
                                      
-                            # Compute the error and update point_errors and point_images
+                            # Compute the error
                             error = np.linalg.norm(point2D_proj[0:2] - point2D.xy)        
+                            
+                            # Save the error for each 3D point and the corresponding image name
                             point_errors[point2D.point3D_id].append(error)
-                            point_images[point2D.point3D_id].add(image.name)
-
-                            # Additionally, save the error for each 3D point and corresponding image
-                            # point_image_errors[point2D.point3D_id][image.name] = error * 0.0001
+                            point_images[point2D.point3D_id].add(image.name)  # add the image name to the set of images for this Point3DId
                             
                 squared_errors = {point_id: np.sum(np.square(errs)) for point_id, errs in point_errors.items()}
                 rmse = {point_id: np.sqrt(sum_err / len(point_errors[point_id])) for point_id, sum_err in squared_errors.items()}
@@ -1474,7 +1267,7 @@ def main_function(src, featureout, features_resolutions, checkpoint_path, orinet
                 # print(df_errors_filtered_sorted)
                 
                 # Filter only those with ImageCount >= 3
-                df_errors_filtered_sorted_count = df_errors_filtered_sorted[df_errors_filtered_sorted['ImageCount'] >= 5]
+                df_errors_filtered_sorted_count = df_errors_filtered_sorted[df_errors_filtered_sorted['ImageCount'] >= 7]
                 
                 # Take the top N
                 df_errors_filtered_sorted_top_N = df_errors_filtered_sorted_count.head(int(sorted_count))
@@ -1573,6 +1366,228 @@ if __name__ == "__main__":
     os.makedirs(featureout, exist_ok=True)
     main_function(src, featureout, features_resolutions, checkpoint_path, orinet_path, keynet_path, affnet_path, hardnet_path,
                   sosnet_path, disk_path, loftr_path, num_feats = 8000)
+
+################################################################################################################################################  
+#     data_dict = {}
+#     # Replace this with your image directory
+#     img_dir = f'{src}'
+#     # List of valid image file extensions
+#     img_exts = ['.JPG', '.jpg', '.jpeg', '.png', '.bmp', '.tiff']
+#     # Get all files in the directory with valid image extensions
+#     img_files = [f for f in os.listdir(img_dir) if os.path.isfile(os.path.join(img_dir, f)) and os.path.splitext(f)[1].lower() in img_exts]
+#     data_dict[dataset] = {}
+#     data_dict[dataset][scene] = img_files
+#     for dataset in data_dict:
+#         for scene in data_dict[dataset]:
+#             print(f'{dataset} / {scene} -> {len(data_dict[dataset][scene])} images')
+#     out_results = {}
+#     timings = {"shortlisting":[],
+#             "feature_detection": [],
+#             "feature_matching":[],
+#             "RANSAC": [],
+#             "Reconstruction": []}
+#     gc.collect()
+#     datasets = []
+#     for dataset in data_dict:
+#         datasets.append(dataset)
+#     start_time = time()
+#     for dataset in datasets:
+#         print(dataset)
+#         if dataset not in out_results:
+#             out_results[dataset] = {}
+#         for scene in data_dict[dataset]:
+#             print(scene)
+#             img_dir = f'{src}'
+#             if not os.path.exists(img_dir):
+#                 continue
+#             try:
+#                 out_results[dataset][scene] = {}
+#                 img_fnames = [f'{src}/{x}' for x in data_dict[dataset][scene]]
+#                 print (f"Got {len(img_fnames)} images")
+
+#                 """only extracted markers.h5"""
+#                 feature_dir = "/data/featureout/auto_markers/1280_LoFTR"
+#                 # output_path = f'{feature_dir}/models/0'
+#                 # # Update output_path to the correct directory
+#                 output_path = f'{feature_dir}/colmap_rec/0'
+                
+#                 # # Increase column width to avoid cutting off the logs
+#                 # pd.set_option('display.max_colwidth', None)
+                
+#                 # Initialize the Reconstruction object
+#                 reconstruction = pycolmap.Reconstruction()
+#                 reconstruction.read(output_path)
+                
+#                 # Initialize error container and a dictionary for images corresponding to each Point3DId
+#                 point_errors = defaultdict(list)
+#                 point_images = defaultdict(set)  # we use a set to avoid duplicate image names
+#                 # point_image_errors = defaultdict(dict)
+                
+#                 for image_id, image in reconstruction.images.items():
+#                     camera = reconstruction.cameras[image.camera_id]
+#                     params = camera.params
+#                     # K = np.array([[params[0], 0, params[2]], [0, params[0], params[3]], [0, 0, 1]])
+#                     K = np.array([[params[0], 0, params[1]], [0, params[0], params[2]], [0, 0, 1]])
+                    
+#                     # Convert quaternion to rotation matrix
+#                     r = R.from_quat([image.qvec[1], image.qvec[2], image.qvec[3], image.qvec[0]])
+#                     # r = R.from_quat([image.qvec[0], image.qvec[1], image.qvec[2], image.qvec[3]])
+#                     rotation_matrix = r.as_matrix()
+                    
+#                     for point2D_id, point2D in enumerate(image.points2D):
+#                         if point2D.point3D_id != -1 and point2D.point3D_id in reconstruction.points3D:
+#                             point3D = reconstruction.points3D[point2D.point3D_id]         
+                             
+#                             # Transform 3D point from world coordinates to camera coordinates
+#                             # point3D_cam = np.dot(np.linalg.inv(rotation_matrix), point3D.xyz - image.tvec) 
+#                             point3D_cam = np.dot(rotation_matrix, point3D.xyz) + image.tvec
+                                   
+#                             # Check if the point is in front of the camera
+#                             if point3D_cam[2] <= 0:
+#                                 continue        
+                            
+#                             # Project the 3D point onto the image plane
+#                             point2D_proj = np.dot(K, point3D_cam)
+#                             point2D_proj = point2D_proj / point2D_proj[2]      
+                                     
+#                             # Compute the error and update point_errors and point_images
+#                             error = np.linalg.norm(point2D_proj[0:2] - point2D.xy)        
+#                             point_errors[point2D.point3D_id].append(error)
+#                             point_images[point2D.point3D_id].add(image.name)
+
+#                             # Additionally, save the error for each 3D point and corresponding image
+#                             # point_image_errors[point2D.point3D_id][image.name] = error * 0.0001
+                            
+#                 squared_errors = {point_id: np.sum(np.square(errs)) for point_id, errs in point_errors.items()}
+#                 rmse = {point_id: np.sqrt(sum_err / len(point_errors[point_id])) for point_id, sum_err in squared_errors.items()}
+
+#                 df_rmse = pd.DataFrame([
+#                     {
+#                         'Point3DId': point_id,
+#                         'rpj_RMSE': rmse_value,
+#                         'Images': list(point_images[point_id]),
+#                         'ImageCount': len(point_images[point_id])
+#                     }
+#                     for point_id, rmse_value in rmse.items()
+#                 ])
+
+#                 # print(df_rmse)
+
+#                 # Apply filters on the DataFrame
+#                 if ls_img_name and da_img_name:
+#                     # Apply filters on the DataFrame if ls_img_name and da_img_name are present
+#                     df_errors_filtered =df_rmse[df_rmse['Images'].apply(
+#                         lambda images: sum(ls_img_name in image for image in images) >= 1 and sum(da_img_name in image for image in images) >= 1)
+#                     ]
+#                 else:
+#                     # Skip filtering if ls_img_name and da_img_name are missing, and use the original DataFrame
+#                     df_errors_filtered = df_rmse.copy()
+                    
+#                 df_errors_filtered_sorted = df_errors_filtered.sort_values(by='rpj_RMSE')
+                
+#                 # print(df_errors_filtered_sorted)
+                
+#                 # Filter only those with ImageCount >= 3
+#                 df_errors_filtered_sorted_count = df_errors_filtered_sorted[df_errors_filtered_sorted['ImageCount'] >= 5]
+                
+#                 # Take the top N
+#                 df_errors_filtered_sorted_top_N = df_errors_filtered_sorted_count.head(int(sorted_count))
+#                 # print(df_errors_filtered_sorted_top_N)
+#                 # print(len(df_errors_filtered_sorted_top_N))
+                
+#                 df_with_reset_index = df_errors_filtered_sorted_top_N.reset_index()
+#                 new_index = ['point_' + str(i) for i in range(len(df_with_reset_index))]
+#                 df_with_reset_index.index = new_index
+#                 df_with_reset_index.drop('index', axis=1, inplace=True)
+#                 print(df_with_reset_index)
+#                 print(len(df_with_reset_index))
+            
+                
+#                 if ENSEMBLE != True:
+#                     keypoint_h5_dir = f'{feature_dir}/{value[0]}_{key}_keypoints.h5'
+#                     matches_h5_dir = f'{feature_dir}/{value[0]}_{key}_matches.h5'
+#                     # keypoint_h5_dir = '/data/output_sp_sg_retri/keypoints.h5'
+#                     # matches_h5_dir = '/data/output_sp_sg_retri/matches.h5'
+#                 else:
+#                     keypoint_h5_dir = f'{feature_dir}/ensemble_keypoints.h5'
+#                     matches_h5_dir = f'{feature_dir}/ensemble_matches.h5'
+                    
+#                 generated_files.append(keypoint_h5_dir)
+#                 # generated_files.append(matches_h5_dir) 
+                
+#                 # Load existing keypoints and matches
+#                 with h5py.File(keypoint_h5_dir, 'r') as f:
+#                     keypoints = {k: v[:] for k, v in f.items()}
+#                 print("Loaded keypoints: ", len(keypoints))
+                
+#                 with h5py.File(matches_h5_dir, 'r') as f:
+#                     matches = {k: {kk: vv[:] for kk, vv in v.items()} for k, v in f.items()}
+#                 print("Loaded matches: ", len(matches))
+                
+#                 # Initialize a new dictionary to store the matches with low errors
+#                 matches_filtered = {}
+#                 # Get the 2D indices of the selected 3D points in each image
+#                 selected_indices = defaultdict(list)
+#                 for point_id in df_with_reset_index['Point3DId']:
+#                     for image_id, image in reconstruction.images.items():
+#                         for i, point2D in enumerate(image.points2D):
+#                             if point2D.point3D_id == point_id:
+#                                 selected_indices[image.name].append(i)
+                
+#                 for _, marker in tqdm(df_with_reset_index.iterrows(), total=df_with_reset_index.shape[0]):
+#                     # Get the images for the current marker
+#                     images = marker['Images']
+#                     # Iterate through the images for the current marker
+#                     for img1 in images:
+#                         # If the current image has matches
+#                         if img1 in matches:
+#                             # Initialize a new dictionary to store the matches for the current image
+#                             matches_filtered[img1] = {}
+#                             # Iterate through the matches for the current image
+#                             for img2, match in matches[img1].items():
+#                                 # If the other image is also in the images for the current marker
+#                                 if img2 in images:
+#                                     # Filter the match to only include the selected 2D points
+#                                     matches_filtered[img1][img2] = match[np.isin(match[:, 0], selected_indices[img1]) & 
+#                                                                         np.isin(match[:, 1], selected_indices[img2])]
+                    
+#                 # Save the matches_filtered dictionary to a new .h5 file
+#                 with h5py.File(f'{feature_dir}/{value[0]}_{key}_markers_n5.h5', 'w') as f:
+#                     generated_files.append(f'{feature_dir}/{value[0]}_{key}_markers_n5.h5')
+#                     for img1, img1_matches in matches_filtered.items():
+#                         group = f.create_group(img1)
+#                         for img2, match in img1_matches.items():
+#                             group.create_dataset(img2, data=match)
+                
+#                 image_name_to_id = {image.name: image_id for image_id, image in reconstruction.images.items()}
+#                 create_custom_csv(df_with_reset_index, keypoints, reconstruction, '/data/rc_format_markers/factory134_1280_LoFTR_markers_n5.csv')
+                
+#                 gc.collect()
+#             except Exception as e:
+#                 print(f"An error occurred during the second loop: {e}")
+#                 traceback.print_exc()
+#     return generated_files, df_with_reset_index, keypoints         
+                
+# if __name__ == "__main__":
+#     src = '/data/refined_images'
+#     featureout = '/data/featureout'
+#     features_resolutions = {
+#     'LoFTR': [1280]
+#     }
+#     checkpoint_path='/data/weights/convnext_large_mlp.clip_laion2b_soup_ft_in12k_in1k_384.pth'
+#     orinet_path = '/data/weights/OriNet.pth'
+#     keynet_path = '/data/weights/keynet_pytorch.pth'
+#     affnet_path = '/data/weights/AffNet.pth'
+#     hardnet_path = '/data/weights/HardNet.pth'
+#     sosnet_path = '/data/weights/sosnet_32x32_liberty.pth'
+#     disk_path = '/data/weights/epipolar-save.pth'
+#     loftr_path = '/data/weights/outdoor_ds.ckpt'
+       
+#     num_feats = 40000
+#     os.makedirs(featureout, exist_ok=True)
+#     main_function(src, featureout, features_resolutions, checkpoint_path, orinet_path, keynet_path, affnet_path, hardnet_path,
+#                   sosnet_path, disk_path, loftr_path, num_feats = 8000)
     
     # create_custom_csv(df_with_reset_index, keypoints, '/data/rc_format_markers/factory134_1280_DISK_markers_n2.csv')
     
+
